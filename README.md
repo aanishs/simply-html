@@ -7,6 +7,8 @@
 
 ![select-to-edit: highlight a paragraph, say what to change, and your local CLI rewrites it in place — sanitized, no model JavaScript](assets/select-to-edit.gif)
 
+**Live demo:** [the "Launch Week" page above, deployed behind a PIN](https://sh-launch-week-69b6.vercel.app) — PIN `8156`. (Read-only; the select-to-edit and chat run in the local `preview`.)
+
 > Status: early build (v0).
 
 ## The one rule (the whole point)
