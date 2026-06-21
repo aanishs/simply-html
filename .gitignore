@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+.simply-html/
+coverage/
+
+# internal planning docs — never public
+_internal/
+.gstack/

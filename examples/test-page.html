@@ -1,0 +1,60 @@
+<h1>Launch Week</h1>
+
+<p>A single page to run the launch from: what's left to do, how many days we have, the
+plan, and a place to think out loud. This page reads like a doc, remembers like an app, and
+can answer questions about itself. The model never wrote a line of JavaScript to make any of
+that work.</p>
+
+<div class="sh-callout warn" data-sh-component="callout" data-sh-tone="warn">
+  Ship rule: nothing goes live on a Friday. If the date below lands on a Friday, we move to
+  the following Monday.
+</div>
+
+<h2 id="countdown">Countdown</h2>
+
+<p>Days left until we flip the switch. Tap to adjust as the date firms up:</p>
+
+<div data-sh-component="counter" data-sh-key="days" data-sh-label="Days to launch" data-sh-min="0" data-sh-max="60" data-sh-default="9"></div>
+
+<h2 id="checklist">The checklist</h2>
+
+<p>The things that actually block launch. Check them off as they land; the list remembers
+its state on this device, and once this page is published it remembers for everyone with the
+PIN.</p>
+
+<div data-sh-component="todo" data-sh-key="launch" data-sh-label="Launch blockers">
+  <ul>
+    <li>Cut the release branch and tag v1.0</li>
+    <li>Final pass on the landing copy</li>
+    <li>Smoke-test signup on a fresh account</li>
+    <li>Schedule the announcement post</li>
+  </ul>
+</div>
+
+<h2 id="plan">The plan</h2>
+
+<div data-sh-component="tabs">
+  <section data-sh-tab="Day of" data-sh-active>
+    <p>Flip the flag at 9am Pacific, watch errors for the first hour, then post the
+    announcement once signup is confirmed working end to end.</p>
+  </section>
+  <section data-sh-tab="If it breaks">
+    <p>Roll the flag back first, ask questions later. A clean rollback in two minutes beats a
+    clever hotfix in twenty. Then reproduce on staging.</p>
+  </section>
+</div>
+
+<h2 id="open-questions">Open questions</h2>
+
+<p>Use the pod to think through anything about this launch. It runs on the local CLI, so it
+is free and there is no API key.</p>
+
+<div data-sh-component="chat-pod"
+     data-sh-key="think"
+     data-sh-label="Think about the launch"
+     data-sh-prompt="You are a sharp, concise launch advisor reading this Launch Week page. Answer in 2-3 short sentences. Be specific and practical."></div>
+
+<h2 id="notes">Notes</h2>
+
+<p>This paragraph is a little rough and could be tighter. Select it and tell the model to fix
+it, and watch it rewrite just this block in place.</p>

@@ -1,0 +1,16 @@
+<h1>A living page</h1>
+
+<p>This page can think. The chat pod below calls your logged-in <code>claude</code> CLI
+through the local bridge — free, no API key. The model answers in the page; it never
+writes any JavaScript.</p>
+
+<div data-sh-component="chat-pod"
+     data-sh-key="ask"
+     data-sh-label="Ask about this page"
+     data-sh-prompt="You are a concise assistant embedded in a web page about simply-html, a tool that publishes agent-made HTML pages. Answer in 1-2 short sentences."></div>
+
+<h2>Why this matters</h2>
+
+<p>Locally, the page is an unlimited LLM playground on your existing subscription. When
+deployed, the same chat pod calls a serverless proxy with a spend cap. Same HTML, two
+homes.</p>

@@ -1,0 +1,47 @@
+<h1>simply-html demo: a page that reads, remembers, and is shared safely</h1>
+
+<p>This page is plain HTML. Every interactive element below is declared with a
+<code>data-sh-*</code> hook and hydrated by the audited runtime. The model never
+writes JavaScript; it only emits content and these hooks.</p>
+
+<h2>Remember a little</h2>
+
+<p>A todo list that actually saves (to <code>localStorage</code> locally, to a managed
+store once deployed):</p>
+
+<div data-sh-component="todo" data-sh-key="groceries" data-sh-label="Groceries">
+  <ul>
+    <li>Oat milk</li>
+    <li>Eggs</li>
+    <li>Coffee</li>
+  </ul>
+</div>
+
+<p>A counter, clamped:</p>
+
+<div data-sh-component="counter" data-sh-key="water" data-sh-label="Cups of water" data-sh-min="0" data-sh-max="12" data-sh-default="3"></div>
+
+<h2>Read nicely</h2>
+
+<div class="sh-callout warn" data-sh-component="callout" data-sh-tone="warn">
+  Heads up: this is a page tool, not an app builder. Data is a small primitive (todos,
+  lists, counters), and that is the whole point.
+</div>
+
+<h3>Tabs are the one nesting component</h3>
+
+<div data-sh-component="tabs">
+  <section data-sh-tab="Overview" data-sh-active>
+    <p>simply-html turns the HTML your agent already makes into a real, shareable page.</p>
+  </section>
+  <section data-sh-tab="How">
+    <p>One command locally. One pasted token to deploy. One serverless function for the
+    PIN gate, the data store, and the optional LLM proxy.</p>
+  </section>
+</div>
+
+<h2>A blocked thing (should be stripped)</h2>
+
+<p>The next line tries to smuggle a script and an onclick. The sanitizer removes both:</p>
+
+<p>safe text <script>alert('xss')</script><span onclick="alert(1)">click me (no handler)</span></p>
