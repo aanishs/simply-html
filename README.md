@@ -5,7 +5,7 @@
 
 **Publish a page your AI agent can safely keep editing.** simply-html turns the markdown/HTML an agent already makes into a live page you can read, talk to, and edit by selecting text. It stays safe to host behind a shared link, because the model writes *content*, never JavaScript.
 
-<!-- TODO(demo): drop the select-to-edit GIF here once recorded -->
+![select-to-edit: highlight a paragraph, say what to change, and your local CLI rewrites it in place — sanitized, no model JavaScript](assets/select-to-edit.gif)
 
 > Status: early build (v0).
 
@@ -17,7 +17,7 @@ That is what makes a *model-edited* page safe to host behind a shared link: ther
 
 ## See it
 
-Select any paragraph on a rendered page, tell it what to change, and your logged-in `claude` / `codex` CLI rewrites just those blocks in place. The replacement is sanitized server-side and spliced back, so the no-model-JavaScript rule holds even for model edits. (Demo GIF coming.)
+That GIF is real: a prose paragraph selected, "turn this into a 3-item checklist" typed, and your logged-in `claude` / `codex` CLI rewrites just those blocks in place. The replacement is sanitized server-side and spliced back, so the no-model-JavaScript rule holds even for model edits.
 
 ## How it works
 
