@@ -319,7 +319,11 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
     // ';' (at top level) separates multiple actions run in order on one event (e.g. add then clear).
     const colon = spec.indexOf(":");
     if (colon === -1) throw new Error(`data-sh-on must be "<event>: <action(...)>", got: ${spec}`);
-    const event = spec.slice(0, colon).trim();
+    // an event may carry a key filter: "keydown.enter" fires only when event.key is Enter.
+    const rawEvent = spec.slice(0, colon).trim();
+    const dot = rawEvent.indexOf(".");
+    const event = dot === -1 ? rawEvent : rawEvent.slice(0, dot);
+    const keyFilter = dot === -1 ? "" : rawEvent.slice(dot + 1).toLowerCase();
     const calls = splitTopLevel(spec.slice(colon + 1), ";")
       .map((s) => s.trim())
       .filter(Boolean)
@@ -332,6 +336,8 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
     if (calls.length === 0) throw new Error(`data-sh-on has no action: ${spec}`);
 
     const handler = (ev: Event): void => {
+      // honour a key filter (e.g. keydown.enter) — ignore the event unless the key matches.
+      if (keyFilter && String((ev as KeyboardEvent).key ?? "").toLowerCase() !== keyFilter) return;
       ev.preventDefault();
       // evaluate each argument against the *current* scope — idents/members resolve to the live
       // references in state, which is exactly what an action mutates. bump() runs in `finally` so a

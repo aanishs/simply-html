@@ -69,7 +69,8 @@
     </ul>
 
     <div class="add-row">
-      <input data-sh-bind="draft" placeholder="Add a habit…" maxlength="60">
+      <input data-sh-bind="draft" placeholder="Add a habit…" maxlength="60"
+             data-sh-on="keydown.enter: add(habits, {name: draft, done: false}); set($, 'draft', '')">
       <button data-sh-on="click: add(habits, {name: draft, done: false}); set($, 'draft', '')">Add</button>
     </div>
   </div>

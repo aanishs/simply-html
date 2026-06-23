@@ -100,6 +100,8 @@ State only changes through this closed registry, used in `data-sh-on`:
 - `obj`/`collection` are formulas that resolve to the live object/array (an item from a
   `data-sh-repeat`, a top-level field, or `$` for the root).
 - Chain actions with `;`: `data-sh-on="click: add(todos, {text: draft, done: false}); set($, 'draft', '')"`.
+- Filter key events with `.<key>`: `data-sh-on="keydown.enter: add(todos, {text: draft, done: false})"`
+  fires only on Enter (handy on an `<input>` so the user can submit without a button).
 - To write a **top-level** field, use `$`: `set($, 'count', count + 1)`.
 - Field names that are built-in members (`toString`, `__proto__`, …) are rejected.
 

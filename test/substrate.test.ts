@@ -147,6 +147,23 @@ describe("substrate / add + $ root + multi-action", () => {
     expect((el.querySelector("input") as HTMLInputElement).value).toBe(""); // bound input reflects it
   });
 
+  it("a key filter (keydown.enter) only fires the action on that key", () => {
+    const el = root(`
+      <input data-sh-bind="draft" data-sh-on="keydown.enter: add(items, {v: draft}); set($, 'draft', '')">
+      <ul data-sh-repeat="items" data-sh-as="i"><li data-sh-text="i.v"></li></ul>`);
+    const app = mountApp(el, { draft: "", items: [] });
+    const input = el.querySelector("input") as HTMLInputElement;
+    input.value = "hello"; input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+    const key = (k: string) => input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: k, bubbles: true }));
+    key("a"); // a non-Enter key does nothing
+    expect(el.querySelectorAll("li").length).toBe(0);
+    key("Enter"); // Enter fires add + clear
+    expect(el.querySelectorAll("li").length).toBe(1);
+    expect(el.querySelector("li")!.textContent).toBe("hello");
+    expect(app.state().draft).toBe("");
+  });
+
   it("set($, field, value) writes a top-level field", () => {
     const el = root(`<p data-sh-text="streak"></p><span id="b" data-sh-on="click: set($, 'streak', streak + 1)">+</span>`);
     const app = mountApp(el, { streak: 4 });
