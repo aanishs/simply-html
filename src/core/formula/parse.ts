@@ -87,6 +87,17 @@ export function parse(src: string): Node {
       }
     }
   }
+  // one `key: value` entry of an object literal. The key is a literal name (ident or string),
+  // never an expression — there is no computed-key form, so a key can't be derived at runtime.
+  function parseEntry(): [string, Node] {
+    const k = peek();
+    let key: string;
+    if (k.kind === "ident" || k.kind === "str") key = next().value;
+    else if (k.kind === "kw") key = next().value; // allow words like `done`, `true` as keys
+    else throw new FormulaError(`expected object key, got ${JSON.stringify(k.value || k.kind)}`);
+    eat(":", "':'");
+    return [key, descend(parseWhere)];
+  }
   function parsePrimary(): Node {
     const t = peek();
     switch (t.kind) {
@@ -97,6 +108,26 @@ export function parse(src: string): Node {
         const inner = descend(parseWhere);
         eat(")", "')'");
         return inner;
+      }
+      case "[": { // array literal: [a, b, c]
+        next();
+        const items: Node[] = [];
+        if (peek().kind !== "]") {
+          items.push(descend(parseWhere));
+          while (peek().kind === ",") { next(); items.push(descend(parseWhere)); }
+        }
+        eat("]", "']'");
+        return { t: "array", items };
+      }
+      case "{": { // object literal: {key: value, ...} — keys are bare idents or strings, never computed
+        next();
+        const entries: Array<[string, Node]> = [];
+        if (peek().kind !== "}") {
+          entries.push(parseEntry());
+          while (peek().kind === ",") { next(); entries.push(parseEntry()); }
+        }
+        eat("}", "'}'");
+        return { t: "object", entries };
       }
       case "kw":
         if (t.value === "true") { next(); return { t: "bool", v: true }; }

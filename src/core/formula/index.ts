@@ -5,7 +5,7 @@ import { parse } from "./parse.js";
 import { evaluate } from "./evaluate.js";
 import { FormulaError, type Node, type Scope } from "./types.js";
 
-export { FormulaError } from "./types.js";
+export { FormulaError, isForbiddenKey } from "./types.js";
 export type { Node, Scope } from "./types.js";
 export { FORMULA_FUNCTIONS } from "./evaluate.js";
 

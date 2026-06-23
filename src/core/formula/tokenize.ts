@@ -4,7 +4,7 @@ import { FormulaError } from "./types.js";
 
 export type TokKind =
   | "num" | "str" | "ident" | "kw"
-  | "(" | ")" | "," | "."
+  | "(" | ")" | "," | "." | "[" | "]" | "{" | "}" | ":"
   | "+" | "-" | "*" | "/" | "%"
   | "==" | "!=" | "<" | "<=" | ">" | ">="
   | "eof";
@@ -19,7 +19,8 @@ const KEYWORDS = new Set(["and", "or", "not", "where", "true", "false", "null"])
 const MAX_LEN = 4000; // a single formula longer than this is rejected outright
 
 const isDigit = (c: string): boolean => c >= "0" && c <= "9";
-const isIdentStart = (c: string): boolean => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
+// `$` is allowed so a binding/action can name the state root as `$` (e.g. set($, 'draft', '')).
+const isIdentStart = (c: string): boolean => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_" || c === "$";
 const isIdentPart = (c: string): boolean => isIdentStart(c) || isDigit(c);
 
 export function tokenize(src: string): Tok[] {
@@ -85,15 +86,17 @@ export function tokenize(src: string): Tok[] {
       continue;
     }
 
-    // single-char punctuation/operators
-    if ("()+-*/%<>,.".includes(c)) {
+    // single-char punctuation/operators. `[` `{` `:` are used ONLY for array/object LITERALS
+    // (prefix position); the parser never accepts a postfix `[`, so computed member access
+    // (`x[expr]`) remains impossible — the read-only access story is unchanged.
+    if ("()+-*/%<>,.[]{}:".includes(c)) {
       out.push({ kind: c as TokKind, value: c, pos: i });
       i++;
       continue;
     }
 
-    // Anything else (=, &, |, !, ;, [, ], {, }, backtick, $ ...) is rejected. This is the
-    // belt that blocks `=` (assignment), `[...]` (computed member), template literals, etc.
+    // Anything else (=, &, |, !, ;, backtick, ...) is rejected. This is the belt that blocks
+    // `=` (assignment), `;` (statement separator), template literals, bitwise ops, etc.
     throw new FormulaError(`unexpected character ${JSON.stringify(c)} at ${i}`);
   }
 

@@ -10,7 +10,7 @@
 
 import type { Config as DomPurifyConfig } from "dompurify";
 
-/** Content tags the model may use: the reading set + component containers. */
+/** Content tags the model may use: the reading set + component containers + inert form controls. */
 export const ALLOWED_TAGS = [
   "h1", "h2", "h3", "h4", "h5", "h6",
   "p", "blockquote", "pre", "code", "kbd", "samp",
@@ -20,14 +20,29 @@ export const ALLOWED_TAGS = [
   "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption",
   "figure", "figcaption",
   "span", "div", "section", "article", "header", "footer", "details", "summary",
+  // Interactive controls for substrate apps. SAFE because they are INERT without the runtime:
+  // there is no <form> (so no submit/navigation), every on* handler is stripped, and form-action
+  // attributes are not in the allowlist. Only the sandboxed runtime (data-sh-bind / data-sh-on)
+  // ever animates them.
+  "button", "input", "textarea", "label",
 ];
 
-/** Tags the model may NEVER emit. Belt to the allowlist's suspenders. */
+/** Tags the model may NEVER emit. Belt to the allowlist's suspenders. (<form>/<select> stay out.) */
 export const FORBID_TAGS = [
   "script", "style", "iframe", "object", "embed", "link", "meta", "base",
-  "form", "input", "button", "textarea", "select", "svg", "math",
+  "form", "select", "svg", "math",
   "noscript", "template", "title",
 ];
+
+/** Interactive tags only meaningful inside a substrate app; allowed but inert elsewhere. */
+export const SIMPLY_HTML_INTERACTIVE_TAGS = new Set<string>(["BUTTON", "INPUT", "TEXTAREA", "LABEL"]);
+
+/** `<input type>` values that are safe on a JS-free page. `image`/`file` are coerced to `text`. */
+export const SIMPLY_HTML_SAFE_INPUT_TYPES = new Set<string>([
+  "text", "checkbox", "radio", "number", "search", "email", "url", "tel",
+  "date", "time", "datetime-local", "month", "week", "range", "color", "password", "hidden",
+  "button", "submit", "reset",
+]);
 
 /** The closed data-sh-* hook set the runtime hydrates. */
 export const SIMPLY_HTML_DATA_ATTRS = [
@@ -41,7 +56,7 @@ export const SIMPLY_HTML_DATA_ATTRS = [
   // never executable on its own; only the audited runtime interprets them.
   "data-sh-app", "data-sh-state", "data-sh-ready",
   "data-sh-text", "data-sh-show", "data-sh-class",
-  "data-sh-repeat", "data-sh-as", "data-sh-on",
+  "data-sh-repeat", "data-sh-as", "data-sh-on", "data-sh-bind",
 ];
 
 /**
@@ -52,7 +67,9 @@ export const SIMPLY_HTML_DATA_ATTRS = [
  * runtime (which refuses to bind anything outside it, and value-checks the URL targets).
  */
 export const SIMPLY_HTML_ATTR_BIND_TARGETS = new Set<string>([
-  "href", "src", "alt", "title", "id", "colspan", "rowspan", "scope",
+  // NOTE: `id` is intentionally excluded — a reactive, model-controlled id is a latent DOM-clobbering
+  // surface (it could collide with the data-sh-ready sentinel or document properties).
+  "href", "src", "alt", "title", "colspan", "rowspan", "scope",
   "start", "reversed", "open", "dir", "lang", "width", "height", "loading", "role",
   "aria-label", "aria-hidden", "aria-live", "aria-expanded", "aria-current", "aria-disabled",
 ]);
@@ -67,6 +84,10 @@ export const ALLOWED_ATTR = [
   "href", "src", "alt", "title", "colspan", "rowspan", "scope",
   "start", "reversed", "type", "open", "dir", "lang",
   "width", "height", "loading", "id", "class",
+  // inert form-control attributes (NO `name`/`form`/`formaction` — avoids DOM clobbering and any
+  // form-submission/navigation target). The runtime drives value/checked at runtime via data-sh-bind.
+  "value", "placeholder", "checked", "disabled", "readonly", "min", "max", "step", "maxlength",
+  "rows", "cols", "for",
   ...SIMPLY_HTML_DATA_ATTRS,
 ];
 
@@ -101,6 +122,7 @@ export function buildDomPurifyConfig(): DomPurifyConfig {
     ALLOW_DATA_ATTR: false, // model cannot smuggle arbitrary data-*
     ALLOWED_URI_REGEXP,
     KEEP_CONTENT: true,
+    SANITIZE_DOM: true, // EXPLICIT: strip id/name that clobber document/form props (DOM clobbering)
   };
 }
 
@@ -144,6 +166,12 @@ export function applyShHooks(purify: PurifyLike): void {
     for (const attr of Array.from(node.attributes)) {
       if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
     }
+    // Coerce an unsafe <input type> (image/file/unknown) to text — no image-button form submit,
+    // no file picker. Belt over the allowlist; the runtime only reads checkbox/number/text anyway.
+    if (node.tagName === "INPUT" && node.hasAttribute("type")) {
+      const t = (node.getAttribute("type") || "").toLowerCase();
+      if (!SIMPLY_HTML_SAFE_INPUT_TYPES.has(t)) node.setAttribute("type", "text");
+    }
     // Intersect class list against the allowlist.
     if (node.hasAttribute("class")) {
       const kept = (node.getAttribute("class") || "")
@@ -151,6 +179,13 @@ export function applyShHooks(purify: PurifyLike): void {
         .filter((c) => c && SIMPLY_HTML_CLASS_ALLOWLIST.has(c));
       if (kept.length) node.setAttribute("class", kept.join(" "));
       else node.removeAttribute("class");
+    }
+    // Gate the reactive class too: `data-sh-class="<name> <formula>"` toggles <name> at runtime, so
+    // <name> must pass the SAME class allowlist as a static class — otherwise the reactive path is a
+    // CSS-exfiltration/spoof hole the static intersection above can't see.
+    if (node.hasAttribute("data-sh-class")) {
+      const className = (node.getAttribute("data-sh-class") || "").trim().split(/\s+/)[0] || "";
+      if (!SIMPLY_HTML_CLASS_ALLOWLIST.has(className)) node.removeAttribute("data-sh-class");
     }
   });
 }

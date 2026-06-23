@@ -29,6 +29,11 @@
     .habit.done { color: #6b7280; text-decoration: line-through; border-color: #a7f3d0; background: #f0fdf4; }
     .remove { border: none; background: transparent; color: #9ca3af; cursor: pointer; font-size: 1.1rem; line-height: 1; }
     .remove:hover { color: #ef4444; }
+    .add-row { display: flex; gap: .5rem; margin-top: 1rem; }
+    .add-row input { flex: 1; padding: .55rem .7rem; border: 1px solid #d1d5db; border-radius: .5rem; font: inherit; }
+    .add-row button { padding: .55rem .9rem; border: 1px solid #d1d5db; border-radius: .5rem; background: #111827; color: #fff;
+                      font: inherit; cursor: pointer; }
+    .add-row button:hover { background: #374151; }
   </style>
 </head>
 <body>
@@ -36,7 +41,7 @@
   <p class="sub">A reactive mini-app — no page-authored JavaScript, just formulas + directives.</p>
 
   <div data-sh-app
-       data-sh-state='{"habits":[
+       data-sh-state='{"draft":"","habits":[
          {"name":"Drink water","done":true},
          {"name":"Stretch 5 min","done":false},
          {"name":"Read 10 pages","done":false},
@@ -59,6 +64,11 @@
         <button class="remove" title="remove" data-sh-on="click: remove(habits, h)">×</button>
       </li>
     </ul>
+
+    <div class="add-row">
+      <input data-sh-bind="draft" placeholder="Add a habit…" maxlength="60">
+      <button data-sh-on="click: add(habits, {name: draft, done: false}); set($, 'draft', '')">Add</button>
+    </div>
   </div>
 
   <script src="../dist/runtime/runtime.js"></script>

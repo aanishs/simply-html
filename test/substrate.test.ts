@@ -95,6 +95,67 @@ describe("substrate / repeat", () => {
   });
 });
 
+describe("substrate / two-way input binding", () => {
+  const type = (input: HTMLInputElement, value: string): void => {
+    input.value = value;
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  };
+  const check = (input: HTMLInputElement, on: boolean): void => {
+    input.checked = on;
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  };
+
+  it("binds a text input to a top-level field, both directions", () => {
+    const el = root(`<input data-sh-bind="draft"><p data-sh-text="draft"></p>`);
+    const app = mountApp(el, { draft: "hi" });
+    const input = el.querySelector("input") as HTMLInputElement;
+    expect(input.value).toBe("hi"); // state -> input
+    type(input, "walk the dog");
+    expect(app.state().draft).toBe("walk the dog"); // input -> state
+    expect(el.querySelector("p")!.textContent).toBe("walk the dog"); // and the derived text updates
+  });
+
+  it("binds a checkbox to a member field", () => {
+    const el = root(`<input type="checkbox" data-sh-bind="task.done">`);
+    const app = mountApp(el, { task: { done: false } });
+    const box = el.querySelector("input") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    check(box, true);
+    expect((app.state().task as { done: boolean }).done).toBe(true);
+  });
+
+  it("refuses to bind through a blocked key (fail-closed at wire time)", () => {
+    const el = root(`<input data-sh-bind="o.__proto__">`);
+    expect(() => mountApp(el, { o: {} })).toThrow(/cannot target '__proto__'/);
+    expect(({} as Record<string, unknown>).x).toBeUndefined(); // no pollution
+  });
+});
+
+describe("substrate / add + $ root + multi-action", () => {
+  it("add(collection, {object literal}) appends a new item and the list grows", () => {
+    const el = root(`
+      <input data-sh-bind="draft">
+      <span role="button" id="add" data-sh-on="click: add(habits, {name: draft, done: false}); set($, 'draft', '')">add</span>
+      <ul data-sh-repeat="habits" data-sh-as="h"><li data-sh-text="h.name"></li></ul>`);
+    const app = mountApp(el, { draft: "Meditate", habits: [{ name: "Water", done: true }] });
+    expect(el.querySelectorAll("li").length).toBe(1);
+
+    click(el.querySelector("#add"));
+    expect(el.querySelectorAll("li").length).toBe(2);
+    expect(Array.from(el.querySelectorAll("li")).map((li) => li.textContent)).toEqual(["Water", "Meditate"]);
+    expect(app.state().draft).toBe(""); // the second action cleared the draft via $
+    expect((el.querySelector("input") as HTMLInputElement).value).toBe(""); // bound input reflects it
+  });
+
+  it("set($, field, value) writes a top-level field", () => {
+    const el = root(`<p data-sh-text="streak"></p><span id="b" data-sh-on="click: set($, 'streak', streak + 1)">+</span>`);
+    const app = mountApp(el, { streak: 4 });
+    click(el.querySelector("#b"));
+    expect(el.querySelector("p")!.textContent).toBe("5");
+    expect(app.state().streak).toBe(5);
+  });
+});
+
 describe("substrate / actions mutate state and re-render", () => {
   it("toggle flips a field and derived text updates", () => {
     const el = root(`
@@ -227,5 +288,48 @@ describe("substrate / safety carries from markup into behavior", () => {
     app.destroy();
     click(el.querySelector("#plus")); // listener removed -> no effect on the DOM
     expect(el.querySelector("p")!.textContent).toBe("1");
+  });
+});
+
+// Regression tests for the adversarial security sweep findings (each was confirmed exploitable
+// against the pre-fix code and must stay closed).
+describe("substrate / sweep regressions", () => {
+  it("[critical] a reactive href drops a whitespace/control-prefixed javascript:/data: URL", () => {
+    // " javascript:..." passed the old regex (leading non-letter) and the browser strips the space
+    // back to the live scheme. The runtime must normalize before the check, like the static door.
+    const el = root(`<a data-sh-attr-href="' ' + 'javascript:alert(1)'">x</a>`);
+    mountApp(el, {});
+    expect(el.querySelector("a")!.hasAttribute("href")).toBe(false);
+
+    const el2 = root(`<a data-sh-attr-href="'\\t' + 'data:text/html,x'">x</a>`); // tab-prefixed data:text/html
+    mountApp(el2, {});
+    expect(el2.querySelector("a")!.hasAttribute("href")).toBe(false);
+
+    const el3 = root(`<a data-sh-attr-href="'https://example.com/ok'">x</a>`); // a legit URL still binds
+    mountApp(el3, {});
+    expect(el3.querySelector("a")!.getAttribute("href")).toBe("https://example.com/ok");
+  });
+
+  it("[medium] actions/binds refuse any built-in member name, not just the proto trio", () => {
+    expect(() => ACTIONS.set([{}, "toString", 1])).toThrow(/not allowed/);
+    expect(() => ACTIONS.set([{}, "valueOf", 1])).toThrow(/not allowed/);
+    expect(() => ACTIONS.inc([{}, "hasOwnProperty", 1])).toThrow(/not allowed/);
+    expect(() => mountApp(root(`<input data-sh-bind="o.toString">`), { o: {} })).toThrow(/cannot target 'toString'/);
+    expect(() => mountApp(root(`<input data-sh-bind="$">`), {})).toThrow(/cannot target '\$'/);
+  });
+
+  it("[medium] a state object with a shadowed toString does not crash a binding (hostile data-sh-state)", () => {
+    // emulates data-sh-state='{"o":{"toString":1}}' surviving to the render layer
+    const el = root(`<a data-sh-attr-title="o">x</a><p data-sh-text="o"></p>`);
+    expect(() => mountApp(el, { o: { toString: 1 } })).not.toThrow();
+    expect(el.querySelector("a")!.hasAttribute("title")).toBe(false); // object -> attr removed, no String() throw
+  });
+
+  it("[low] a throwing action in a multi-action chain still re-renders committed state (no torn DOM)", () => {
+    const el = root(`<p data-sh-text="a"></p><span id="b" data-sh-on="click: set($,'a',1); set(5,'b',2)">x</span>`);
+    const app = mountApp(el, { a: 0 });
+    click(el.querySelector("#b")); // 2nd action throws (target 5 is not an object); bump() runs in finally
+    expect(app.state().a).toBe(1);
+    expect(el.querySelector("p")!.textContent).toBe("1"); // DOM re-synced to committed state
   });
 });

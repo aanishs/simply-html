@@ -21,9 +21,12 @@ import { JSDOM } from "jsdom";
 import { getNodeSanitizer } from "../src/core/sanitize/node.js";
 import { render } from "../src/core/render/markdown.js";
 
+// Tags that must NEVER survive. <input>/<button>/<textarea>/<label> are deliberately NOT here:
+// they are allowed for substrate apps but INERT (no <form>, every on* stripped, no form-action
+// attr), so assertInert still proves the real property — no handler, no dangerous URL — on them.
 const FORBIDDEN_TAGS = new Set([
-  "SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "BASE", "FORM", "INPUT",
-  "BUTTON", "TEXTAREA", "SELECT", "SVG", "MATH", "NOSCRIPT", "TEMPLATE", "TITLE",
+  "SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "BASE", "FORM",
+  "SELECT", "SVG", "MATH", "NOSCRIPT", "TEMPLATE", "TITLE",
   "FRAME", "FRAMESET", "APPLET",
 ]);
 const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href", "data", "background", "srcset", "poster"]);
@@ -102,6 +105,12 @@ const CORPUS: Vector[] = [
   { name: "OWASP polyglot", src: "OWASP", payload: `javascript:/*--></title></style></textarea></script></xmp><svg/onload=alert(1)>` },
   { name: "svg+xml data image (raster-only hook must reject)", src: "cure53", payload: `<img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+">` },
   { name: "object codebase js", src: "PS", payload: `<object codebase="javascript:alert(1)" data="x"></object>` },
+
+  // --- substrate interactive surface: tags are allowed but must stay inert ---
+  { name: "input type=image js src", src: "PS", payload: `<input type="image" src="javascript:alert(1)" formaction="javascript:alert(1)">` },
+  { name: "input type=file (coerced)", src: "OWASP", payload: `<input type="file">` },
+  { name: "button formaction js", src: "PS", payload: `<button formaction="javascript:alert(1)">x</button>` },
+  { name: "button formaction outside form", src: "PS", payload: `<button form="f" formaction="data:text/html,<script>alert(1)</script>">x</button>` },
 ];
 
 const sanitizer = getNodeSanitizer();

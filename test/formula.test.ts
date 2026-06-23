@@ -62,6 +62,21 @@ describe("formula / correctness", () => {
     expect(evalFormula("max((items where paid).amount)", HABITS)).toBe(10);
   });
 
+  it("array + object literals construct fresh plain data", () => {
+    expect(evalFormula("[1, 2, 3]")).toEqual([1, 2, 3]);
+    expect(evalFormula("sum([1, 2, 3])")).toBe(6);
+    expect(evalFormula("count([10, 20])")).toBe(2);
+    expect(evalFormula('{name: "x", done: false}')).toEqual({ name: "x", done: false });
+    expect(evalFormula('{label: upper("hi"), nested: [1, 2]}')).toEqual({ label: "HI", nested: [1, 2] });
+    // values come from scope (this is how an `add` action builds a new item)
+    expect(evalFormula("{name: draft, done: false}", { draft: "Walk" })).toEqual({ name: "Walk", done: false });
+  });
+
+  it("`$` resolves like any other scope field (the substrate binds it to the state root)", () => {
+    expect(evalFormula("$.streak", { $: { streak: 7 } })).toBe(7);
+    expect(evalFormula("$.habits.length", { $: { habits: [1, 2, 3] } })).toBe(3);
+  });
+
   it("compileFormula reuses the AST across scopes", () => {
     const f = compileFormula("count(habits where done)");
     expect(f({ habits: [{ done: true }] })).toBe(1);
@@ -117,6 +132,33 @@ describe("formula / safety — injection is structurally blocked", () => {
     // no assignment node exists, so prototype pollution / state mutation cannot be expressed
     mustThrow("habits.__proto__.polluted = 1", HABITS);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it("blocks every built-in member name, not just the prototype trio (read + construct)", () => {
+    mustThrow("habits.toString", HABITS);
+    mustThrow("habits.valueOf", HABITS);
+    mustThrow("habits.hasOwnProperty", HABITS);
+    mustThrow("streak.__defineGetter__", HABITS);
+    mustThrow("{toString: 1}"); // can't build a poisoned object that crashes String() later
+    mustThrow("{valueOf: 1}");
+  });
+
+  it("min/max do not blow the stack on a large collection", () => {
+    const big = { rows: Array.from({ length: 50_000 }, (_unused, i) => i) };
+    expect(evalFormula("max(rows)", big)).toBe(49_999); // reduce, not Math.max(...spread)
+    expect(evalFormula("min(rows)", big)).toBe(0);
+  });
+
+  it("object/array literals cannot introduce a dangerous key or computed access", () => {
+    mustThrow('{__proto__: 1}');
+    mustThrow('{constructor: 1}');
+    mustThrow('{prototype: 1}');
+    mustThrow('{__proto__: {polluted: 1}}');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    // array literals add `[ ]` as PREFIX only — postfix computed member access is still impossible
+    mustThrow("habits[0]", HABITS);
+    mustThrow('habits["constructor"]', HABITS);
+    mustThrow("[1, 2][0]"); // can't index even a literal array
   });
 
   it("bounds nesting, length, and collection size (no hang)", () => {

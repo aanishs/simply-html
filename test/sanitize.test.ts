@@ -62,7 +62,7 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
   it("keeps the closed substrate directive set on hosted pages", () => {
     const out = clean(
       `<div data-sh-app data-sh-state='{"n":1}'>` +
-      `<p data-sh-text="count(items where done)" data-sh-show="n > 0" data-sh-class="on n"></p>` +
+      `<p data-sh-text="count(items where done)" data-sh-show="n > 0" data-sh-class="success n"></p>` +
       `<ul data-sh-repeat="items" data-sh-as="it"><li data-sh-on="click: toggle(it, 'done')"></li></ul>` +
       `</div>`,
     );
@@ -76,6 +76,14 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
     expect(out).toContain("data-sh-on");
   });
 
+  it("drops a data-sh-class whose class is not in the class allowlist (no reactive CSS-exfil)", () => {
+    const allowed = clean(`<span data-sh-class="success n > 0">x</span>`);
+    expect(allowed).toContain("data-sh-class"); // allowlisted class survives
+    const blocked = clean(`<span data-sh-class="attacker-controlled n > 0">x</span>`);
+    expect(blocked).not.toContain("data-sh-class"); // arbitrary class -> directive dropped
+    expect(blocked).not.toContain("attacker-controlled");
+  });
+
   it("keeps a safe data-sh-attr-* target but drops event/style/unknown targets", () => {
     const out = clean(
       `<a data-sh-attr-href="'#x'" data-sh-attr-onclick="'alert(1)'" ` +
@@ -85,6 +93,12 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
     expect(out).not.toMatch(/data-sh-attr-onclick/i); // event target dropped at sanitize time
     expect(out).not.toMatch(/data-sh-attr-style/i);
     expect(out).not.toMatch(/data-sh-attr-srcset/i); // unknown target dropped
+  });
+
+  it("strips DOM-clobbering id/name (SANITIZE_DOM is explicit, not implicit)", () => {
+    expect(clean('<div id="attributes">x</div>')).not.toMatch(/id=/i); // clobbers Element.attributes
+    expect(clean('<input id="body">')).not.toMatch(/id=/i); // clobbers document.body
+    expect(clean('<a id="x">y</a>')).toContain('id="x"'); // a benign id still survives
   });
 
   it("a data-sh-on value is inert data, never promoted to an event handler", () => {
