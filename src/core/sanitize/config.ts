@@ -36,7 +36,32 @@ export const SIMPLY_HTML_DATA_ATTRS = [
   "data-sh-active", "data-sh-target", "data-sh-tone",
   "data-sh-min", "data-sh-max", "data-sh-step",
   "data-sh-default", "data-sh-prompt",
+  // substrate (reactive [data-sh-app] regions): structural + binding directives. Each value is
+  // either pure data (JSON state) or a read-only sandboxed formula / a closed action call —
+  // never executable on its own; only the audited runtime interprets them.
+  "data-sh-app", "data-sh-state", "data-sh-ready",
+  "data-sh-text", "data-sh-show", "data-sh-class",
+  "data-sh-repeat", "data-sh-as", "data-sh-on",
 ];
+
+/**
+ * Targets a `data-sh-attr-<name>` reactive binding may write. This is a security policy, not a
+ * convenience list: it deliberately excludes `on*`, `style`, `class`, and every event/script
+ * bearing attribute, so a reactive attribute can never promote authored markup into executable
+ * code. Shared by the sanitizer (which keeps `data-sh-attr-<safe>` and drops the rest) and the
+ * runtime (which refuses to bind anything outside it, and value-checks the URL targets).
+ */
+export const SIMPLY_HTML_ATTR_BIND_TARGETS = new Set<string>([
+  "href", "src", "alt", "title", "id", "colspan", "rowspan", "scope",
+  "start", "reversed", "open", "dir", "lang", "width", "height", "loading", "role",
+  "aria-label", "aria-hidden", "aria-live", "aria-expanded", "aria-current", "aria-disabled",
+]);
+
+/** The subset of bind targets whose value is a URL and must pass the URL allowlist at bind time. */
+export const SIMPLY_HTML_URL_BIND_TARGETS = new Set<string>(["href", "src"]);
+
+/** O(1) lookup of the closed hook set, used by the sanitizer to force-keep our inert directives. */
+const SH_DIRECTIVE_SET = new Set<string>(SIMPLY_HTML_DATA_ATTRS);
 
 export const ALLOWED_ATTR = [
   "href", "src", "alt", "title", "colspan", "rowspan", "scope",
@@ -92,13 +117,27 @@ type PurifyLike = {
  */
 export function applyShHooks(purify: PurifyLike): void {
   purify.addHook("uponSanitizeAttribute", (node, data) => {
-    const d = data as { attrName?: string; attrValue?: string; keepAttr?: boolean };
+    const d = data as { attrName?: string; attrValue?: string; keepAttr?: boolean; forceKeepAttr?: boolean };
     if (!d || !d.attrName) return;
     if (d.attrName === "src" && node.tagName === "IMG") {
       const v = (d.attrValue || "").trim();
       const ok = DATA_IMAGE_REGEX.test(v) || ALLOWED_URI_REGEXP.test(v);
       if (!ok) d.keepAttr = false;
     }
+    // `data-sh-attr-<name>` is a reactive-attribute binding. ALLOW_DATA_ATTR is off, so DOMPurify
+    // would drop it on the name check; force-keep ONLY the safe targets, drop the rest (e.g.
+    // data-sh-attr-onclick) so an unsafe binding never even reaches the runtime.
+    if (d.attrName.startsWith("data-sh-attr-")) {
+      const target = d.attrName.slice("data-sh-attr-".length).toLowerCase();
+      if (SIMPLY_HTML_ATTR_BIND_TARGETS.has(target)) d.forceKeepAttr = true;
+      else d.keepAttr = false;
+      return;
+    }
+    // The closed data-sh-* hook set carries formulas / action calls / JSON whose values legitimately
+    // contain ':' '(' etc. DOMPurify validates every attribute value against the URI allowlist and
+    // would drop e.g. data-sh-on="click: toggle(..)" as a bogus URI. These are inert data the
+    // BROWSER never interprets — only the sandboxed runtime does — so force-keep the whole closed set.
+    if (SH_DIRECTIVE_SET.has(d.attrName)) d.forceKeepAttr = true;
   });
   purify.addHook("afterSanitizeAttributes", (node) => {
     // Strip any residual event handler attributes.

@@ -2,7 +2,7 @@
 // shared PIN. These tests lock the invariant: dangerous markup out, content + the closed
 // data-sh-* hook set in.
 import { describe, it, expect } from "vitest";
-import { getNodeSanitizer } from "../src/core/sanitize/node.js";
+import { getNodeSanitizer, parseFragment } from "../src/core/sanitize/node.js";
 
 const s = getNodeSanitizer();
 const clean = (h: string) => s.sanitizeHtml(h);
@@ -55,6 +55,47 @@ describe("sanitizer: dangerous markup is stripped", () => {
     expect(out).toContain("sh-callout");
     expect(out).toContain("warn");
     expect(out).not.toContain("exfil-selector");
+  });
+});
+
+describe("sanitizer: substrate directives survive; dangerous bindings do not", () => {
+  it("keeps the closed substrate directive set on hosted pages", () => {
+    const out = clean(
+      `<div data-sh-app data-sh-state='{"n":1}'>` +
+      `<p data-sh-text="count(items where done)" data-sh-show="n > 0" data-sh-class="on n"></p>` +
+      `<ul data-sh-repeat="items" data-sh-as="it"><li data-sh-on="click: toggle(it, 'done')"></li></ul>` +
+      `</div>`,
+    );
+    expect(out).toContain("data-sh-app");
+    expect(out).toContain("data-sh-state");
+    expect(out).toContain("data-sh-text");
+    expect(out).toContain("data-sh-show");
+    expect(out).toContain("data-sh-class");
+    expect(out).toContain("data-sh-repeat");
+    expect(out).toContain("data-sh-as");
+    expect(out).toContain("data-sh-on");
+  });
+
+  it("keeps a safe data-sh-attr-* target but drops event/style/unknown targets", () => {
+    const out = clean(
+      `<a data-sh-attr-href="'#x'" data-sh-attr-onclick="'alert(1)'" ` +
+      `data-sh-attr-style="'color:red'" data-sh-attr-srcset="'x'">y</a>`,
+    );
+    expect(out).toContain("data-sh-attr-href"); // safe target survives
+    expect(out).not.toMatch(/data-sh-attr-onclick/i); // event target dropped at sanitize time
+    expect(out).not.toMatch(/data-sh-attr-style/i);
+    expect(out).not.toMatch(/data-sh-attr-srcset/i); // unknown target dropped
+  });
+
+  it("a data-sh-on value is inert data, never promoted to an event handler", () => {
+    // the runtime binds data-sh-on on any element; <button> is forbidden by the tag allowlist, so
+    // a hosted substrate app uses an allowed element (e.g. a span with role=button) for actions.
+    const out = clean(`<span role="button" data-sh-on="click: toggle(x, 'done')">go</span>`);
+    expect(out).toContain("data-sh-on"); // kept as opaque data for the runtime
+    expect(out).not.toMatch(/\sonclick/i); // but never becomes a real handler
+    // re-parse and confirm the node carries no on* handler attribute
+    const el = parseFragment(out).querySelector("span")!;
+    expect(Array.from(el.attributes).some((a) => /^on/i.test(a.name))).toBe(false);
   });
 });
 

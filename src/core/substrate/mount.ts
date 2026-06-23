@@ -21,7 +21,15 @@ import { signal, effect } from "../reactive/signal.js";
 import { compileFormula, type Scope } from "../formula/index.js";
 import { parse } from "../formula/parse.js";
 import { evaluate } from "../formula/evaluate.js";
+import {
+  ALLOWED_URI_REGEXP, DATA_IMAGE_REGEX,
+  SIMPLY_HTML_ATTR_BIND_TARGETS, SIMPLY_HTML_URL_BIND_TARGETS,
+} from "../sanitize/config.js";
 import { ACTIONS } from "./actions.js";
+
+// A reactive `href`/`src` is the one moment a javascript:/data:text URL could land — the sanitizer
+// only saw the opaque data-sh-attr-* value, so the runtime re-checks it against the URL allowlist.
+const safeUrl = (v: string): boolean => ALLOWED_URI_REGEXP.test(v) || DATA_IMAGE_REGEX.test(v);
 
 export interface AppHandle {
   /** The live application state object (mutated in place by actions). */
@@ -60,9 +68,14 @@ export function mountApps(root: ParentNode): AppHandle[] {
         }
       } catch { /* a malformed state attribute mounts an empty app rather than throwing */ }
     }
-    handles.push(mountApp(el, state));
-    APP_MOUNTED.add(el);
-    el.setAttribute("data-sh-ready", ""); // lets CSS reveal the region only after hydration
+    APP_MOUNTED.add(el); // mark first: a region that throws is not retried on the next pass
+    try {
+      handles.push(mountApp(el, state));
+      el.setAttribute("data-sh-ready", ""); // lets CSS reveal the region only after hydration
+    } catch (err) {
+      // one malformed region (e.g. an injected unknown action) must not abort the whole page
+      if (typeof console !== "undefined") console.warn("[simply-html] app failed to mount:", err);
+    }
   });
   return handles;
 }
@@ -121,12 +134,16 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
 
     for (const attr of Array.from(el.attributes)) {
       if (!attr.name.startsWith("data-sh-attr-")) continue;
-      const target = attr.name.slice("data-sh-attr-".length);
+      const target = attr.name.slice("data-sh-attr-".length).toLowerCase();
+      if (!SIMPLY_HTML_ATTR_BIND_TARGETS.has(target)) continue; // never bind on*/style/event attrs
+      const isUrl = SIMPLY_HTML_URL_BIND_TARGETS.has(target);
       const f = compileFormula(attr.value);
       sink.push(effect(() => {
         const v = f(scope());
-        if (v == null || v === false) el.removeAttribute(target);
-        else el.setAttribute(target, v === true ? "" : String(v));
+        if (v == null || v === false) { el.removeAttribute(target); return; }
+        const str = v === true ? "" : String(v);
+        if (isUrl && str !== "" && !safeUrl(str)) { el.removeAttribute(target); return; }
+        el.setAttribute(target, str);
       }));
     }
 

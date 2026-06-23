@@ -191,6 +191,26 @@ describe("substrate / safety carries from markup into behavior", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
+  it("data-sh-attr-* refuses to bind an event-handler or style target", () => {
+    const el = root(`
+      <button data-sh-attr-onclick="'alert(1)'" data-sh-attr-style="'color:red'" data-sh-attr-href="'#ok'">x</button>`);
+    mountApp(el, {});
+    const b = el.querySelector("button")!;
+    expect(b.hasAttribute("onclick")).toBe(false); // not in the safe-target allowlist
+    expect(b.hasAttribute("style")).toBe(false);
+    expect(b.getAttribute("href")).toBe("#ok"); // a safe target still binds
+  });
+
+  it("data-sh-attr-href drops a javascript: / unsafe URL", () => {
+    const el = root(`<a data-sh-attr-href="'javascript:alert(1)'">x</a>`);
+    mountApp(el, {});
+    expect(el.querySelector("a")!.hasAttribute("href")).toBe(false); // unsafe URL -> not set
+
+    const el2 = root(`<a data-sh-attr-href="'https://example.com/ok'">x</a>`);
+    mountApp(el2, {});
+    expect(el2.querySelector("a")!.getAttribute("href")).toBe("https://example.com/ok");
+  });
+
   it("a formula in a binding still cannot reach JS globals", () => {
     const el = root(`<p data-sh-text="process"></p>`);
     mountApp(el, {});
