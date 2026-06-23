@@ -157,5 +157,9 @@ to write CSS. (A richer app design vocabulary is the host's responsibility and i
 ## 8. A complete example
 
 See [`examples/habit-tracker.html`](examples/habit-tracker.html): derived counts, a conditional
-celebration, a `habit-row` component rendered per item, toggle/remove actions, and add-from-input
-— a full reactive app with zero authored JavaScript or CSS.
+celebration, a `habit-row` component rendered per item, toggle/remove actions, and add-from-input.
+The **`data-sh-app` region** — the part you (or the model) author — has zero JavaScript and zero
+CSS. That file is a standalone demo, so it also includes a page *shell* — a `<style>` block (the
+host's design) and a `<script>` (the one audited runtime). Those are host-supplied, not model
+output; the file is commented to make the split obvious. On a hosted page the host and the
+sanitizer supply them, and the model never writes them.

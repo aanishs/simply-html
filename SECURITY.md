@@ -12,12 +12,17 @@ sanitizer (DOMPurify on a jsdom document, pinned to exact versions) with a **clo
 attribute allowlist** before it is ever inserted into a page. All interactivity is
 implemented by simply-html's own audited runtime, which the model cannot modify.
 
-That is the entire reason a model-edited page is safe to put behind a shared link: there is
-no model-authored script to smuggle an attack through, only sanitized content. This is a
+That is the reason a model-edited page is comparatively safe to put behind a shared link: there
+is no model-authored script to smuggle an attack through, only sanitized content. This is a
 **security** decision, not a stylistic one: the moment a hosted, shared page can carry
 model-authored JavaScript, any prompt-injected or hostile instruction becomes arbitrary
-script in a visitor's browser. You cannot review your way out of arbitrary JS, so the design
-makes it structurally impossible to emit in the first place.
+script in a visitor's browser, and you cannot review your way out of arbitrary JS. So instead of
+trying to *review* model JS, the design *doesn't accept it*: the model emits only content + a
+closed hook set, and every byte is re-sanitized through one pinned, closed-allowlist pass — so
+model-authored script can't survive onto the page. That is a strong, defense-in-depth control
+(closed allowlist + jsdom + pinned versions + a live test corpus), **not** a proof of universal
+safety — see the corpus caveats below. The guarantee protects a *visitor* from the page; it does
+not turn the PIN into an authorization system (see "PIN, not auth").
 
 ### Reactive apps without JavaScript
 
@@ -28,7 +33,7 @@ up:
 
 - **Formulas are read-only by construction.** They are parsed to an AST and interpreted (never
   `eval`/`new Function`); there is **no assignment, statement, or loop node**, so a formula
-  physically cannot mutate state or define behavior. Identifiers resolve only to own properties
+  cannot, by construction, mutate state or define behavior. Identifiers resolve only to own properties
   of a data scope (JS globals are simply not in scope → `undefined`); **every `Object.prototype`
   member name** (`__proto__`, `constructor`, `prototype`, `toString`, `valueOf`,
   `hasOwnProperty`, `__defineGetter__`, …) is blocked for both read and write; a fuel counter and
@@ -74,12 +79,13 @@ allowed but inert (see above); `<form>`/`<select>` remain forbidden.
 
 ## What the corpus proves (and what it doesn't)
 
-[`test/security-corpus.test.ts`](test/security-corpus.test.ts) runs a corpus of 100 real, sourced
-XSS / mutation-XSS / DOMPurify-bypass / substrate-injection vectors (OWASP XSS Filter Evasion
-cheat sheet, cure53 DOMPurify bypass history, PortSwigger) through the **shipped** sanitizer,
-across both untrusted entry points, and asserts **structurally** — by re-parsing the sanitizer's
-output the way a browser would — that nothing executable survives: no `<script>`, no `on*`
-handler, no `javascript:`/`vbscript:`/`data:text/html` URL, no forbidden tag. A negative control
+[`test/security-corpus.test.ts`](test/security-corpus.test.ts) runs a corpus of real, sourced
+vectors — covering **XSS filter-evasion, mutation-XSS, DOMPurify-bypass, and substrate-injection**
+classes (from the OWASP XSS Filter Evasion cheat sheet, cure53's DOMPurify bypass history, and
+PortSwigger) — through the **shipped** sanitizer, across both untrusted entry points, and asserts
+**structurally** — by re-parsing the sanitizer's output the way a browser would — that nothing
+executable survives: no `<script>`, no `on*` handler, no `javascript:`/`vbscript:`/`data:text/html`
+URL, no forbidden tag. Run `npm test` to see the exact count pass in CI. A negative control
 proves a legitimate raster `data:` image is still allowed (the allowlist discriminates, it
 does not blanket-deny). The substrate's own guards (read-only formula sandbox, closed actions,
 two-way binding) carry their own suites in

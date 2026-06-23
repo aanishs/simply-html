@@ -5,14 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Habit tracker · simply-html substrate</title>
   <!--
-    The north-star demo for the simply-html substrate.
+    ============================================================================================
+    HOW TO READ THIS FILE — the two halves matter, and they are authored by different parties.
 
-    Everything interactive below is authored as CONTENT + read-only FORMULAS + a closed set of
-    data-sh-* directives. There is NOT ONE LINE of page-authored JavaScript. The only script is
-    the audited runtime (dist/runtime/runtime.js), which owns all behavior: it reads the
-    directives, binds formulas to the DOM through the reactive core, and runs the closed action
-    registry. Formulas can only read; the only way state changes is toggle/remove (audited).
+    This is a STANDALONE page shell wrapping a simply-html app, so you can open it and see the
+    runtime work. A simply-html page has three layers, by three authors:
+
+      • STRUCTURE  (the HTML)            — authored by the model/you
+      • BEHAVIOR   (the runtime)         — authored by simply-html (audited, ships with it)
+      • DESIGN     (the CSS)             — authored by the host / design system
+
+    The headline rule — "the model writes content, never JavaScript or CSS" — is about the
+    MODEL-AUTHORED layer only: the `<div data-sh-app>…</div>` region far below. THAT region has
+    zero JavaScript and zero CSS — only HTML + read-only formulas + closed data-sh-* directives.
+
+    The `<style>` block and the `<script>` tag in THIS file are the HOST's shell, NOT model
+    output: the <style> is the host's design, and the <script> is the one audited runtime that
+    owns all behavior (it reads the directives, binds formulas, and runs the closed actions).
+    On a hosted simply-html page those two are supplied by the host and the sanitizer; the model
+    never writes them. So a `<style>`/`<script>` here is the system working as intended, not a
+    violation of the rule.
+    ============================================================================================
   -->
+  <!-- ↓↓↓ HOST SHELL (design) — NOT model-authored ↓↓↓ -->
   <style>
     :root { color-scheme: light dark; }
     body { font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; max-width: 30rem; margin: 3rem auto; padding: 0 1.25rem; }
@@ -40,6 +55,10 @@
   <h1>Today's habits</h1>
   <p class="sub">A reactive mini-app — no page-authored JavaScript, just formulas + directives.</p>
 
+  <!-- ╔══════════════════════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║ ↓↓↓ MODEL-AUTHORED REGION — HTML + read-only formulas + data-sh-* ONLY.               ║ -->
+  <!-- ║     No <script>, no JavaScript, no <style>, no style=, no invented classes.           ║ -->
+  <!-- ╚══════════════════════════════════════════════════════════════════════════════════════╝ -->
   <div data-sh-app
        data-sh-state='{"draft":"","habits":[
          {"name":"Drink water","done":true},
@@ -74,7 +93,10 @@
       <button data-sh-on="click: add(habits, {name: draft, done: false}); set($, 'draft', '')">Add</button>
     </div>
   </div>
+  <!-- ↑↑↑ END MODEL-AUTHORED REGION ↑↑↑ -->
 
+  <!-- HOST SHELL (behavior): the ONE audited runtime — not model-authored. It reads the
+       data-sh-* directives above and owns all interactivity. The model never writes this. -->
   <script src="../dist/runtime/runtime.js"></script>
 </body>
 </html>
