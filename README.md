@@ -22,8 +22,9 @@ almost *anything*, and you didn't write a line of code.
 Not just *prettier* markdown — **dynamic** pages. All of this is just HTML + a sprinkle of `data-sh-*`
 directives, authored by your agent:
 
-- **A plan that isn't a wall of text** — sections you can collapse, a live checklist you can tick
-  off, a little "3 of 8 done" counter that updates as you go.
+- **A plan that isn't a wall of text** — collapsible phases, a checklist you tick off, a live "3 of
+  9 done (33%)" counter, and a "hide completed" filter. ([`examples/plan.html`](examples/plan.html) —
+  this is the thesis, made real.)
 - **A doc you edit by talking** — select a paragraph, say *"turn this into a 3-item checklist,"* and
   your local `claude`/`codex` CLI rewrites just that bit, in place.
 - **An actual little app** — a habit tracker, a tally, a planner, a budget splitter:
@@ -72,8 +73,9 @@ let it get?*
 ```bash
 git clone https://github.com/aanishs/simply-html && cd simply-html
 npm install && npm run build
+node dist/cli/index.js preview examples/plan.html            # a project plan that's actually alive
+node dist/cli/index.js preview examples/habit-tracker.html   # a little reactive app
 node dist/cli/index.js preview examples/test-page.html       # a reading page — select text to edit
-node dist/cli/index.js preview examples/habit-tracker.html   # the little reactive app
 ```
 
 Or install the Claude Code skills in `skills/` and just say *"preview this page"* / *"turn this into

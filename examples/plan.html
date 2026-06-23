@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project plan · simply-html</title>
+  <!--
+    ============================================================================================
+    THE THESIS, MADE REAL: a project plan that isn't a dead wall of text.
+
+    This is the kind of thing an agent could hand you instead of a 1,000-line markdown plan —
+    live progress, collapsible phases, per-phase counts, a "hide done" filter, tick-off tasks.
+    All of it is HTML + read-only formulas + data-sh-* directives. Zero authored JavaScript.
+
+    Three layers, three authors (same as any simply-html page):
+      • STRUCTURE (HTML)        — the model / you
+      • BEHAVIOR  (the runtime) — simply-html (the <script> below; audited, ships with it)
+      • DESIGN    (the CSS)     — the host (the <style> below)
+    The "no JS / no CSS" rule is about the MODEL-AUTHORED region (the <div data-sh-app> far
+    below). The <style> and <script> here are the host shell, not model output.
+    ============================================================================================
+  -->
+  <!-- ↓↓↓ HOST SHELL (design) — NOT model-authored ↓↓↓ -->
+  <style>
+    :root { color-scheme: light dark; --line: #e5e7eb; --muted: #6b7280; --accent: #2563eb; }
+    body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1.25rem; color: #111827; }
+    h1 { font-size: 1.6rem; margin: 0 0 .15rem; }
+    .meta { color: var(--muted); margin: 0 0 1.25rem; }
+    .summary-card { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.1rem; border: 1px solid var(--line); border-radius: .75rem; margin-bottom: .75rem; }
+    .pct { font-size: 1.5rem; font-weight: 700; }
+    .summary-text { color: var(--muted); }
+    .dots { letter-spacing: .12em; font-size: .9rem; }
+    .dot-on { color: var(--accent); }
+    .dot-off { color: var(--line); }
+    .celebrate { margin-left: auto; padding: .35rem .7rem; border-radius: 999px; background: #ecfdf5; color: #065f46; font-weight: 600; font-size: .85rem; }
+    .filter { display: flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .9rem; margin: 0 0 1.5rem .2rem; }
+    details { border: 1px solid var(--line); border-radius: .75rem; margin-bottom: .6rem; overflow: hidden; }
+    summary { cursor: pointer; padding: .8rem 1rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary .count { color: var(--muted); font-weight: 500; font-size: .9rem; }
+    ul.tasks { list-style: none; margin: 0; padding: .2rem .6rem .7rem; }
+    ul.tasks li { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; border-radius: .5rem; }
+    ul.tasks li:hover { background: #f9fafb; }
+    ul.tasks input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+    .task-text.done { color: var(--muted); text-decoration: line-through; }
+  </style>
+</head>
+<body>
+  <h1>Launch plan · Q3</h1>
+  <p class="meta">A plan you can actually use — tick things off, hide what's done, watch it move.</p>
+
+  <!-- ╔══════════════════════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║ ↓↓↓ MODEL-AUTHORED REGION — HTML + read-only formulas + data-sh-* ONLY (no JS/CSS).   ║ -->
+  <!-- ╚══════════════════════════════════════════════════════════════════════════════════════╝ -->
+  <div data-sh-app data-sh-state='{
+        "showDone": true,
+        "phases": ["Foundation", "Build", "Polish & launch"],
+        "tasks": [
+          {"phase":"Foundation","text":"Set up the repo + CI","done":true},
+          {"phase":"Foundation","text":"Lock the data model","done":true},
+          {"phase":"Foundation","text":"Wire up auth","done":false},
+          {"phase":"Build","text":"Core flow, end to end","done":true},
+          {"phase":"Build","text":"The hard edge case","done":false},
+          {"phase":"Build","text":"Error + empty states","done":false},
+          {"phase":"Polish & launch","text":"Design pass","done":false},
+          {"phase":"Polish & launch","text":"Write the README","done":false},
+          {"phase":"Polish & launch","text":"Ship it","done":false}
+        ]
+      }'>
+
+    <!-- reusable row: a checkbox bound to the task + its text, struck through when done -->
+    <div data-sh-def="task-row">
+      <input type="checkbox" data-sh-bind="t.done">
+      <span class="task-text" data-sh-class="done t.done" data-sh-text="t.text"></span>
+    </div>
+
+    <div class="summary-card">
+      <span class="pct" data-sh-text="round(count(tasks where done) / count(tasks) * 100) + '%'"></span>
+      <span class="summary-text" data-sh-text="count(tasks where done) + ' of ' + count(tasks) + ' tasks done'"></span>
+      <span class="dots" data-sh-repeat="tasks" data-sh-as="t"><span data-sh-class="dot-on t.done" data-sh-text="if(t.done, '●', '○')"></span></span>
+      <span class="celebrate" data-sh-show="count(tasks where done) == count(tasks)">🎉 Shipped!</span>
+    </div>
+
+    <label class="filter">
+      <input type="checkbox" data-sh-bind="showDone"> Show completed tasks
+    </label>
+
+    <div data-sh-repeat="phases" data-sh-as="p">
+      <details open>
+        <summary>
+          <span data-sh-text="p"></span>
+          <span class="count" data-sh-text="count(tasks where phase == p and done) + ' / ' + count(tasks where phase == p)"></span>
+        </summary>
+        <ul class="tasks" data-sh-repeat="tasks where phase == p and (showDone or not done)" data-sh-as="t">
+          <li data-sh-use="task-row" data-sh-arg-t="t"></li>
+        </ul>
+      </details>
+    </div>
+  </div>
+  <!-- ↑↑↑ END MODEL-AUTHORED REGION ↑↑↑ -->
+
+  <!-- HOST SHELL (behavior): the one audited runtime. Not model-authored. -->
+  <script src="../dist/runtime/runtime.js"></script>
+</body>
+</html>
