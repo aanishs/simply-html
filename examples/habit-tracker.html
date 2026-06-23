@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Habit tracker · simply-html substrate</title>
+  <!--
+    The north-star demo for the simply-html substrate.
+
+    Everything interactive below is authored as CONTENT + read-only FORMULAS + a closed set of
+    data-sh-* directives. There is NOT ONE LINE of page-authored JavaScript. The only script is
+    the audited runtime (dist/runtime/runtime.js), which owns all behavior: it reads the
+    directives, binds formulas to the DOM through the reactive core, and runs the closed action
+    registry. Formulas can only read; the only way state changes is toggle/remove (audited).
+  -->
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; max-width: 30rem; margin: 3rem auto; padding: 0 1.25rem; }
+    h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+    .sub { color: #6b7280; margin: 0 0 1.5rem; }
+    /* reveal the app only after the runtime hydrates it — no pre-render template flash */
+    [data-sh-app]:not([data-sh-ready]) { visibility: hidden; }
+    .progress { font-weight: 600; margin: 0 0 1rem; }
+    .celebrate { margin: 0 0 1rem; padding: .6rem .8rem; border-radius: .5rem; background: #ecfdf5; color: #065f46; }
+    ul.habits { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; }
+    ul.habits li { display: flex; align-items: center; gap: .5rem; }
+    .habit { flex: 1; text-align: left; padding: .55rem .7rem; border: 1px solid #d1d5db; border-radius: .5rem;
+             background: transparent; font: inherit; cursor: pointer; }
+    .habit.done { color: #6b7280; text-decoration: line-through; border-color: #a7f3d0; background: #f0fdf4; }
+    .remove { border: none; background: transparent; color: #9ca3af; cursor: pointer; font-size: 1.1rem; line-height: 1; }
+    .remove:hover { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <h1>Today's habits</h1>
+  <p class="sub">A reactive mini-app — no page-authored JavaScript, just formulas + directives.</p>
+
+  <div data-sh-app
+       data-sh-state='{"habits":[
+         {"name":"Drink water","done":true},
+         {"name":"Stretch 5 min","done":false},
+         {"name":"Read 10 pages","done":false},
+         {"name":"Inbox to zero","done":false}
+       ]}'>
+
+    <p class="progress" data-sh-text="count(habits where done) + ' of ' + count(habits) + ' done'"></p>
+
+    <p class="celebrate"
+       data-sh-show="count(habits) > 0 and count(habits where done) == count(habits)">
+      🔥 All done. Nice work.
+    </p>
+
+    <ul class="habits" data-sh-repeat="habits" data-sh-as="h">
+      <li>
+        <button class="habit"
+                data-sh-class="done h.done"
+                data-sh-on="click: toggle(h, 'done')"
+                data-sh-text="if(h.done, '✓  ', '○  ') + h.name"></button>
+        <button class="remove" title="remove" data-sh-on="click: remove(habits, h)">×</button>
+      </li>
+    </ul>
+  </div>
+
+  <script src="../dist/runtime/runtime.js"></script>
+</body>
+</html>

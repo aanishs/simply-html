@@ -4,7 +4,7 @@
 // you can *see* — without a line of model JavaScript executing.
 import { describe, it, expect, beforeEach } from "vitest";
 import { JSDOM } from "jsdom";
-import { mountApp, ACTIONS } from "../src/core/substrate/index.js";
+import { mountApp, mountApps, ACTIONS } from "../src/core/substrate/index.js";
 
 let dom: JSDOM;
 let doc: Document;
@@ -136,6 +136,31 @@ describe("substrate / actions mutate state and re-render", () => {
     expect(el2.querySelector("p")!.textContent).toBe("free");
     click(el2.querySelector("#up"));
     expect(el2.querySelector("p")!.textContent).toBe("FREE");
+  });
+});
+
+describe("substrate / mountApps scans [data-sh-app] regions", () => {
+  it("mounts a region from its data-sh-state JSON and marks it ready", () => {
+    const el = root(`
+      <div data-sh-app data-sh-state='{"habits":[{"name":"a","done":true},{"name":"b","done":false}]}'>
+        <p data-sh-text="count(habits where done) + '/' + count(habits)"></p>
+      </div>`);
+    const handles = mountApps(el);
+    expect(handles.length).toBe(1);
+    expect(el.querySelector("[data-sh-app]")!.hasAttribute("data-sh-ready")).toBe(true);
+    expect(el.querySelector("p")!.textContent).toBe("1/2");
+  });
+
+  it("is idempotent — a region already mounted is not mounted twice", () => {
+    const el = root(`<div data-sh-app data-sh-state='{"n":1}'><p data-sh-text="n"></p></div>`);
+    expect(mountApps(el).length).toBe(1);
+    expect(mountApps(el).length).toBe(0); // second pass skips the already-mounted region
+  });
+
+  it("a malformed data-sh-state mounts an empty app instead of throwing", () => {
+    const el = root(`<div data-sh-app data-sh-state="{not json}"><p data-sh-text="missing"></p></div>`);
+    expect(() => mountApps(el)).not.toThrow();
+    expect(el.querySelector("p")!.textContent).toBe(""); // undefined -> empty
   });
 });
 

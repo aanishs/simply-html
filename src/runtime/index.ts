@@ -3,6 +3,7 @@
 import { hydrateTree } from "./components.js";
 import { store } from "./data.js";
 import { initSelectToEdit } from "./edit.js";
+import { mountApps } from "../core/substrate/index.js";
 
 declare global {
   interface Window {
@@ -27,6 +28,7 @@ function boot(): void {
   // Deployed pages carry no inline boot script (strict CSP), so default the config here.
   window.__SIMPLY_HTML__ ??= { base: location.origin, mode: "deployed" };
   hydrateTree(document);
+  mountApps(document); // reactive [data-sh-app] regions: composed primitives + formulas
   wireMarkdownTaskLists();
   initSelectToEdit();
 }

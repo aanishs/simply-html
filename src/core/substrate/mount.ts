@@ -39,6 +39,34 @@ const toText = (v: unknown): string =>
 const truthy = (v: unknown): boolean =>
   v !== false && v != null && v !== 0 && v !== "" && !(Array.isArray(v) && v.length === 0);
 
+const APP_MOUNTED = new WeakSet<Element>();
+
+/**
+ * Find every `[data-sh-app]` region under `root` and mount it. Initial state is read from the
+ * element's `data-sh-state` attribute as JSON (pure data — parsed, never evaluated). Idempotent:
+ * a region is mounted at most once, so re-running after an edit only picks up new regions.
+ */
+export function mountApps(root: ParentNode): AppHandle[] {
+  const handles: AppHandle[] = [];
+  root.querySelectorAll("[data-sh-app]").forEach((el) => {
+    if (APP_MOUNTED.has(el)) return;
+    let state: Record<string, unknown> = {};
+    const raw = el.getAttribute("data-sh-state");
+    if (raw) {
+      try {
+        const parsed: unknown = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          state = parsed as Record<string, unknown>;
+        }
+      } catch { /* a malformed state attribute mounts an empty app rather than throwing */ }
+    }
+    handles.push(mountApp(el, state));
+    APP_MOUNTED.add(el);
+    el.setAttribute("data-sh-ready", ""); // lets CSS reveal the region only after hydration
+  });
+  return handles;
+}
+
 export function mountApp(root: Element, initial: Record<string, unknown>): AppHandle {
   const doc = root.ownerDocument;
   const [getState, setState] = signal<Record<string, unknown>>(initial);
