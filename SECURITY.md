@@ -48,9 +48,17 @@ up:
   formula is opaque to the sanitizer, so the runtime re-validates the resolved value — and it
   **normalizes leading/embedded whitespace and control characters before the scheme check, the
   same way DOMPurify does**, so the reactive door can never admit a `" javascript:"` that the
-  browser would strip back to a live scheme.
+  browser would strip back to a live scheme. A protocol-relative `//host` (which resolves to a
+  third-party origin) is also rejected on the reactive door.
 - **Reactive classes are gated by the same class allowlist** as static classes, so the
   CSS-exfiltration defense can't be bypassed through `data-sh-class`.
+- **SVG is a drawing subset, not a script surface.** The model may emit a safe shape set
+  (`svg`/`g`/`path`/`rect`/`circle`/`text`/gradients/…) so a chart or diagram is content, but every
+  SVG script vector is hard-blocked: `<foreignObject>`, `<use>`, `<image>`, the `<animate>`/`<set>`
+  SMIL family, `<filter>`, `on*`, and `javascript:` hrefs (`href`/`xlink:href` are not bindable). A
+  paint/clip attribute (`fill`/`stroke`/`clip-path`) may reference a **local** `url(#fragment)` but
+  an **external** `url(https://…)` — a no-script off-page request — is stripped on both the static
+  and reactive doors.
 
 ## Trust boundary
 
@@ -70,12 +78,14 @@ up:
 
 The sanitizer config lives in [`src/core/sanitize/config.ts`](src/core/sanitize/config.ts):
 a closed `ALLOWED_TAGS`, an explicit `FORBID_TAGS` (script, style, iframe, object, embed,
-**form**, **select**, svg, math, template, noscript, base, meta, link, ...), `ALLOW_DATA_ATTR:
+**form**, **select**, math, template, noscript, base, meta, link, and the SVG script vectors —
+`foreignObject`, `use`, `image`, the `animate`/`set` SMIL family, `filter`, ...), `ALLOW_DATA_ATTR:
 false`, explicit `SANITIZE_DOM: true` (strips DOM-clobbering `id`/`name`), a URL allowlist that
 rejects `javascript:` / generic `data:`, raster-only `data:` images, an `on*`-attribute strip
-hook, an `<input type>` coercion hook, and a class allowlist that gates both static `class` and
-reactive `data-sh-class`. The interactive tags `<button>`/`<input>`/`<textarea>`/`<label>` are
-allowed but inert (see above); `<form>`/`<select>` remain forbidden.
+hook, an SVG-paint hook that drops external `url(…)` funciri, an `<input type>` coercion hook, and
+a class allowlist that gates both static `class` and reactive `data-sh-class`. The interactive
+tags `<button>`/`<input>`/`<textarea>`/`<label>` and the SVG drawing subset are allowed but inert
+(see above); `<form>`/`<select>` and every SVG script vector remain forbidden.
 
 ## What the corpus proves (and what it doesn't)
 
@@ -133,6 +143,14 @@ changed sanitizer behavior would be caught.
   *bad* state (e.g. an action that throws); the runtime fails safe (per-region isolation,
   `bump()` in `finally` so the DOM re-syncs, write-key guards) rather than executing anything, but
   authoring access is authoring access — the PIN is a deterrent, not an authorization system.
+- **A static external image can phone home.** The deployed CSP allows `img-src https:`, so a page
+  may load an image from any host — which means a *static* `<img src="https://third-party/…">` the
+  author wrote fires an off-page GET on render. This is kept on purpose (docs and reports legitimately
+  embed external images), and the constant URL can only carry what the author already knew at write
+  time — it cannot exfiltrate a viewer's runtime app state. The *dynamic* channels that could splice
+  live state into a request (reactive `src`/`href`, SVG paint `url(…)`) are the ones the runtime
+  closes. Given the no-PHI / non-sensitive posture above, the static-image GET is an accepted residual;
+  tightening `img-src` to `'self' data:` is the lever if a deployment wants to forbid it entirely.
 - **Trusted surfaces are trusted.** Template fields and the serverless function code are
   authored by you, not the model; their safety rests on standard escaping and schema checks,
   not on this sanitizer.

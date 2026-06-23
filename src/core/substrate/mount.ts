@@ -22,25 +22,29 @@
 // reactive core's dynamic dependencies would actually pay off — is a deliberate later step.
 
 import { signal, effect } from "../reactive/signal.js";
-import { compileFormula, isForbiddenKey, type Scope, type Node } from "../formula/index.js";
+import { compileFormula, isForbiddenKey, type Scope, type Node as AstNode } from "../formula/index.js";
 import { parse } from "../formula/parse.js";
 import { evaluate } from "../formula/evaluate.js";
 import {
-  ALLOWED_URI_REGEXP, DATA_IMAGE_REGEX,
-  SIMPLY_HTML_ATTR_BIND_TARGETS, SIMPLY_HTML_URL_BIND_TARGETS,
+  ALLOWED_URI_REGEXP, DATA_IMAGE_REGEX, isSafeSvgValue,
+  SIMPLY_HTML_ATTR_BIND_TARGETS, SIMPLY_HTML_URL_BIND_TARGETS, SIMPLY_HTML_SVG_BIND_TARGETS,
 } from "../sanitize/config.js";
 import { ACTIONS } from "./actions.js";
 
 // The same whitespace/control set the sanitizer (DOMPurify) strips from a URL before scheme-matching.
 const URL_WHITESPACE = /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
 
-// A reactive `href`/`src` is the one moment a javascript:/data:text URL could land — the sanitizer
-// only saw the opaque data-sh-attr-* value. We MUST re-check exactly as the static door does:
-// browsers strip leading/embedded control+whitespace before resolving a scheme, so " javascript:"
-// or "java\tscript:" re-forms a dangerous scheme. Normalize first, then test — never diverge from
-// DOMPurify, or the reactive door admits what the static door rejects.
+// A reactive `href`/`src` is the one moment a javascript:/data:text URL could land - the sanitizer
+// only saw the opaque data-sh-attr-* value, never the formula's result. We re-check exactly as the
+// static door does: browsers strip leading/embedded control+whitespace before resolving a scheme,
+// so a space- or tab-broken " javascript:" re-forms a dangerous scheme. Normalize first, then test
+// - never diverge from DOMPurify, or the reactive door admits what the static door rejects.
+// Also reject protocol-relative `//host`: the allowlist treats a leading `/` as same-origin, but
+// `//evil.example` resolves to a THIRD-PARTY origin (a phishing/redirect target). No legitimate
+// reactive URL needs it - write `https://` or a real relative path - so it is dropped.
 const safeUrl = (v: string): boolean => {
   const normalized = v.replace(URL_WHITESPACE, "");
+  if (normalized.startsWith("//")) return false; // protocol-relative //host -> third-party origin
   return ALLOWED_URI_REGEXP.test(normalized) || DATA_IMAGE_REGEX.test(normalized);
 };
 
@@ -196,10 +200,13 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
   // with `data-sh-use="name"` (passing args via `data-sh-arg-<param>="<formula>"`). Definitions are
   // harvested here and removed from the DOM (they are templates, not content), then expanded at use
   // sites — at MOUNT time, composing the same audited primitives. No new model code, no eval.
-  const components = new Map<string, string>();
+  // Store the definition's child NODES (deep-cloned), not its innerHTML string — cloning preserves
+  // the SVG namespace (re-parsing `<rect>` via innerHTML would make a bogus HTML element) and avoids
+  // a re-parse round-trip on already-sanitized content.
+  const components = new Map<string, Node[]>();
   root.querySelectorAll("[data-sh-def]").forEach((el) => {
     const name = el.getAttribute("data-sh-def") || "";
-    if (name) components.set(name, el.innerHTML);
+    if (name) components.set(name, Array.from(el.childNodes).map((n) => n.cloneNode(true)));
     el.remove();
   });
 
@@ -231,8 +238,8 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
   // a scope extended with the args (`data-sh-arg-<param>="<formula>"`, re-evaluated reactively).
   function wireUse(el: Element, name: string, scope: ScopeFn, sink: Sink, depth: number): void {
     if (depth >= MAX_COMPONENT_DEPTH) { warn(`component '${name}' nested too deep`); return; }
-    const template = components.get(name);
-    if (template === undefined) { warn(`unknown component '${name}'`); return; }
+    const templateNodes = components.get(name);
+    if (templateNodes === undefined) { warn(`unknown component '${name}'`); return; }
 
     // each arg is a formula re-evaluated against the current scope, so the component stays reactive
     const argFns: Array<[string, (s?: Scope) => unknown]> = [];
@@ -246,12 +253,12 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
       return s;
     };
 
-    const tpl = doc.createElement("template");
-    tpl.innerHTML = template;
-    const frag = tpl.content.cloneNode(true) as DocumentFragment;
     el.textContent = "";
-    for (const child of Array.from(frag.children)) walk(child, childScope, sink, depth + 1);
-    el.appendChild(frag);
+    for (const tnode of templateNodes) {
+      const clone = tnode.cloneNode(true);
+      el.appendChild(clone);
+      if (clone.nodeType === 1) walk(clone as Element, childScope, sink, depth + 1);
+    }
   }
 
   function wireElement(el: Element, scope: ScopeFn, sink: Sink): void {
@@ -284,6 +291,7 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
       const target = attr.name.slice("data-sh-attr-".length).toLowerCase();
       if (!SIMPLY_HTML_ATTR_BIND_TARGETS.has(target)) continue; // never bind on*/style/event attrs
       const isUrl = SIMPLY_HTML_URL_BIND_TARGETS.has(target);
+      const isSvg = SIMPLY_HTML_SVG_BIND_TARGETS.has(target); // value-check the paint funciri
       const f = compileFormula(attr.value);
       sink.push(effect(() => {
         const v = f(scope());
@@ -293,6 +301,8 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
         if (v == null || v === false || typeof v === "object") { el.removeAttribute(target); return; }
         const str = v === true ? "" : String(v);
         if (isUrl && str !== "" && !safeUrl(str)) { el.removeAttribute(target); return; }
+        // a reactive SVG paint (fill/stroke/stop-color) must not resolve to an external url() funciri
+        if (isSvg && !isSafeSvgValue(str)) { el.removeAttribute(target); return; }
         el.setAttribute(target, str);
       }));
     }
@@ -307,7 +317,7 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
   // Resolve an assignable target (the {object, key} a write lands on) from a field-path AST.
   // Only a bare ident (a top-level field on the root) or a `obj.key` member is assignable;
   // dangerous keys and non-object containers are refused. Returns null if not writable.
-  function resolveTarget(path: Node, scope: Scope): { container: Record<string, unknown>; key: string } | null {
+  function resolveTarget(path: AstNode, scope: Scope): { container: Record<string, unknown>; key: string } | null {
     if (path.t === "ident") {
       if (isUnsafeWriteKey(path.name)) return null;
       return { container: getState(), key: path.name }; // top-level fields live on the live root
@@ -355,10 +365,11 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
 
   function wireRepeat(el: Element, src: string, parentScope: ScopeFn, sink: Sink, depth: number): void {
     const alias = el.getAttribute("data-sh-as") || "item";
-    const template = el.innerHTML;
+    const indexName = el.getAttribute("data-sh-index"); // optional: bind the 0-based index (for positioning)
+    // capture the per-item template as cloned NODES (preserves SVG namespace; no innerHTML re-parse)
+    const templateNodes = Array.from(el.childNodes).map((n) => n.cloneNode(true));
     el.textContent = "";
     const f = compileFormula(src);
-    const tpl = doc.createElement("template");
     let childDisposers: Sink = [];
 
     const owner = effect(() => {
@@ -369,13 +380,18 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
       const coll = f(parentScope());
       const items = Array.isArray(coll) ? coll : [];
       el.textContent = "";
-      for (const item of items) {
-        tpl.innerHTML = template;
-        const frag = tpl.content.cloneNode(true) as DocumentFragment;
-        const itemScope: ScopeFn = () => ({ ...parentScope(), [alias]: item });
-        for (const child of Array.from(frag.children)) walk(child, itemScope, childDisposers, depth);
-        el.appendChild(frag);
-      }
+      items.forEach((item, idx) => {
+        const itemScope: ScopeFn = () => {
+          const s: Scope = { ...parentScope(), [alias]: item };
+          if (indexName) s[indexName] = idx;
+          return s;
+        };
+        for (const tnode of templateNodes) {
+          const clone = tnode.cloneNode(true);
+          el.appendChild(clone);
+          if (clone.nodeType === 1) walk(clone as Element, itemScope, childDisposers, depth);
+        }
+      });
     });
 
     sink.push(owner, () => { for (const d of childDisposers.splice(0)) d(); });

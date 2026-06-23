@@ -94,8 +94,22 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
     expect(out).toContain("data-sh-values");
     expect(out).toContain("data-sh-labels");
     expect(out).toContain("data-sh-max");
-    // the model can't smuggle a raw <svg> (still forbidden); the runtime draws it at runtime
-    expect(clean(`<svg onload="alert(1)"><rect/></svg>`)).not.toMatch(/<svg/i);
+  });
+
+  it("allows a safe SVG drawing but strips its script vectors", () => {
+    // safe shapes survive (the model can draw a chart)…
+    const safe = clean(`<svg viewBox="0 0 10 10"><rect x="1" y="1" width="5" height="5" fill="red"></rect><path d="M0 0 L10 10"></path></svg>`);
+    expect(safe).toMatch(/<svg/i);
+    expect(safe).toMatch(/<rect/i);
+    expect(safe).toContain("viewBox");
+    expect(safe).toContain('d="M0 0 L10 10"');
+    // …but every script vector is removed
+    expect(clean(`<svg onload="alert(1)"><rect></rect></svg>`)).not.toMatch(/onload/i);
+    expect(clean(`<svg><script>alert(1)</script></svg>`)).not.toMatch(/<script/i);
+    expect(clean(`<svg><foreignObject><img src=x onerror=alert(1)></foreignObject></svg>`)).not.toMatch(/foreignobject/i);
+    expect(clean(`<svg><animate attributeName="href" values="javascript:alert(1)"></animate></svg>`)).not.toMatch(/<animate/i);
+    expect(clean(`<svg><use href="data:image/svg+xml,x"></use></svg>`)).not.toMatch(/<use/i);
+    expect(clean(`<svg><a href="javascript:alert(1)"><rect></rect></a></svg>`)).not.toMatch(/javascript:/i);
   });
 
   it("drops a data-sh-class whose class is not in the class allowlist (no reactive CSS-exfil)", () => {

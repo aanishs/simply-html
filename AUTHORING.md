@@ -34,6 +34,7 @@ live root is also reachable in any formula/action as `$`.
 | `data-sh-attr-<name>` | formula | sets attribute `<name>` reactively (safe targets only — see §6) |
 | `data-sh-repeat` | formula → array | renders the element's inner template once per item |
 | `data-sh-as` | name | names the per-item binding for `data-sh-repeat` (default `item`) |
+| `data-sh-index` | name | (optional, on `data-sh-repeat`) binds the 0-based loop index — handy for positioning SVG |
 | `data-sh-on` | `<event>: <action>; <action>` | runs closed action(s) on a DOM event, then re-renders |
 | `data-sh-bind` | field path | two-way binds an `<input>`/`<textarea>` to a state field |
 | `data-sh-def` | name | defines a reusable component (its inner HTML is the template) |
@@ -145,6 +146,41 @@ Bind a numeric series and the runtime draws a small reactive SVG — it redraws 
 become hover tooltips; `data-sh-max` (optional) fixes the scale. The bars/line use `currentColor`, so
 the host's CSS `color` themes the chart. You declare it; the runtime draws the SVG — you write no JS.
 
+## 5c. Drawing in SVG (custom, interactive graphics — still no JS)
+
+`data-sh-chart` is a shortcut; for anything custom you can **draw in SVG yourself** and wire it with
+the same directives. The model may emit a safe SVG drawing subset — `svg`, `g`, `path`, `rect`,
+`circle`, `ellipse`, `line`, `polyline`, `polygon`, `text`, `tspan`, gradients, `clipPath` — and the
+sanitizer strips every script vector (`<script>`, `<foreignObject>`, `<use>`, `<image>`, the
+`<animate>`/`<set>` family, `on*`, `javascript:` hrefs), so "no model JS" still holds for graphics.
+
+Make it reactive/interactive by putting `data-sh-*` on the SVG shapes. Geometry/paint attributes
+(`x`, `y`, `cx`, `cy`, `r`, `width`, `height`, `d`, `points`, `transform`, `fill`, `stroke`, …) can
+be reactively bound with `data-sh-attr-*`; shapes can carry `data-sh-on` actions; `<text>` takes
+`data-sh-text`. In a `data-sh-repeat`, add `data-sh-index="i"` to get the 0-based index for
+positioning:
+
+```html
+<svg viewBox="0 0 100 50">
+  <g data-sh-repeat="bars" data-sh-as="b" data-sh-index="i">
+    <rect width="20"
+          data-sh-attr-x="i * 25"
+          data-sh-attr-height="b.value"
+          data-sh-attr-y="40 - b.value"
+          data-sh-attr-fill="if(b.label == selected, '#2563eb', '#bfdbfe')"
+          data-sh-on="click: set($, 'selected', b.label)"></rect>
+    <text y="48" data-sh-attr-x="i * 25 + 10" data-sh-text="b.label"></text>
+  </g>
+</svg>
+```
+
+That's a clickable, reactive bar chart — hand-drawn, no charting library, no JavaScript. See
+[`examples/svg-chart.html`](examples/svg-chart.html). (`href`/`xlink:href` are deliberately not
+bindable, and `<style>` inside SVG is dropped — express colour with `fill`/`stroke` + `currentColor`.)
+Paint can reference a **local** gradient/clip (`fill="url(#myGradient)"`), but an **external**
+`url(https://…)` in `fill`/`stroke`/`clip-path` is stripped: an off-page paint-server reference is a
+request that leaks, so it never survives — statically or through a reactive `data-sh-attr-fill`.
+
 ## 6. Rules & limits (what keeps it safe)
 
 - **No JavaScript.** No `<script>`, no `on*` attributes, no `javascript:`/`data:text/html` URLs.
@@ -153,8 +189,10 @@ the host's CSS `color` themes the chart. You declare it; the runtime draws the S
   `<select>` are not. Buttons/inputs do nothing except through `data-sh-on` / `data-sh-bind`.
 - **`data-sh-attr-*` safe targets only:** `href`, `src`, `alt`, `title`, `width`, `height`,
   `colspan`, `rowspan`, `scope`, `start`, `reversed`, `open`, `dir`, `lang`, `loading`, `role`,
-  `aria-*`. Never `on*`, `style`, `class` (use `data-sh-class`), `id`, or `name`. A reactive
-  `href`/`src` is URL-checked, so a dangerous scheme is dropped.
+  `aria-*`, plus the SVG geometry/paint attrs (§5c). Never `on*`, `style`, `class` (use
+  `data-sh-class`), `id`, or `name`. A reactive `href`/`src` is URL-checked, so a dangerous scheme
+  (`javascript:`) or a protocol-relative `//host` (a third-party origin) is dropped; a reactive
+  SVG paint (`fill`/`stroke`) drops an external `url(…)` (see §5c).
 - **Two-way `data-sh-bind`** targets a field path (`draft` or `todo.text`), not an arbitrary
   expression, and refuses built-in member names.
 - **Bounded:** formulas are size/work-capped; `add` is collection-capped; components are

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hand-drawn interactive chart · simply-html</title>
+  <!--
+    ============================================================================================
+    The agent draws its OWN chart — in SVG — and makes it interactive, with NO charting library
+    and NO JavaScript. This is more than the data-sh-chart shortcut: every bar, label, and the
+    click-to-select behaviour is hand-authored SVG + read-only formulas + data-sh-* directives.
+
+    The sanitizer allows a safe SVG drawing subset (shapes/paths/text) and strips every script
+    vector (<script>/<foreignObject>/<animate>/<use>/<image>, on*, javascript: hrefs), so
+    "model writes content, never JS" still holds — even for graphics.
+
+    HOST SHELL (the <style> + the runtime <script>) is not model-authored; the MODEL-AUTHORED
+    region is the <div data-sh-app> below.
+    ============================================================================================
+  -->
+  <!-- ↓↓↓ HOST SHELL (design) — NOT model-authored ↓↓↓ -->
+  <style>
+    :root { color-scheme: light dark; --muted: #6b7280; }
+    body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; color: #111827; }
+    h1 { font-size: 1.5rem; margin: 0 0 .15rem; }
+    .meta { color: var(--muted); margin: 0 0 1.25rem; }
+    .chart { width: 100%; height: auto; display: block; cursor: pointer; }
+    .chart rect { transition: fill .12s ease; }
+    .readout { margin-top: 1rem; color: var(--muted); min-height: 1.5rem; }
+    .readout b { color: #2563eb; }
+  </style>
+</head>
+<body>
+  <h1>Quarterly signups</h1>
+  <p class="meta">A chart the agent drew by hand in SVG — click a bar.</p>
+
+  <!-- ╔══════════════════════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║ ↓↓↓ MODEL-AUTHORED REGION — HTML + SVG + read-only formulas + data-sh-* (no JS/CSS).  ║ -->
+  <!-- ╚══════════════════════════════════════════════════════════════════════════════════════╝ -->
+  <div data-sh-app data-sh-state='{
+        "selected": "",
+        "bars": [
+          {"label":"Q1","value":32},
+          {"label":"Q2","value":18},
+          {"label":"Q3","value":44},
+          {"label":"Q4","value":27}
+        ]
+      }'>
+
+    <svg class="chart" viewBox="0 0 100 52">
+      <g data-sh-repeat="bars" data-sh-as="b" data-sh-index="i">
+        <!-- bar: x by index, height auto-scaled to the max, colour reflects selection -->
+        <rect width="20"
+              data-sh-attr-x="i * 25 + 2"
+              data-sh-attr-y="44 - (b.value / max(bars.value)) * 40"
+              data-sh-attr-height="(b.value / max(bars.value)) * 40"
+              data-sh-attr-fill="if(b.label == selected, '#2563eb', '#bfdbfe')"
+              data-sh-on="click: set($, 'selected', b.label)"></rect>
+        <!-- value on top, label underneath -->
+        <text text-anchor="middle" font-size="3.2" fill="#6b7280"
+              data-sh-attr-x="i * 25 + 12"
+              data-sh-attr-y="41 - (b.value / max(bars.value)) * 40"
+              data-sh-text="b.value"></text>
+        <text text-anchor="middle" font-size="3.5" fill="#111827" y="50"
+              data-sh-attr-x="i * 25 + 12"
+              data-sh-text="b.label"></text>
+      </g>
+    </svg>
+
+    <p class="readout" data-sh-text="if(selected == '', 'Nothing selected yet — click a bar.',
+        'Selected ' + selected + ' (' + sum((bars where label == selected).value) + ' signups).')"></p>
+  </div>
+  <!-- ↑↑↑ END MODEL-AUTHORED REGION ↑↑↑ -->
+
+  <!-- HOST SHELL (behavior): the one audited runtime. Not model-authored. -->
+  <script src="../dist/runtime/runtime.js"></script>
+</body>
+</html>
