@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security issue
+    url: https://github.com/aanishs/simply-html/security/advisories/new
+    about: Report a sanitizer or runtime bypass privately (please don't open a public issue).

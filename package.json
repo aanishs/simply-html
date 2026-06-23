@@ -2,9 +2,32 @@
   "name": "simply-html",
   "version": "0.0.0",
   "private": true,
-  "description": "Turn agent-made markdown/HTML into a beautiful, PIN-gated page with a hub. A page tool, not an app builder.",
+  "description": "Turn an AI agent's markdown/HTML into a living, PIN-shareable page — readable, AI-editable, and even a tiny reactive app — where the model writes content, never JavaScript.",
   "type": "module",
   "license": "MIT",
+  "author": "aanishs (https://github.com/aanishs)",
+  "homepage": "https://github.com/aanishs/simply-html#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aanishs/simply-html.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aanishs/simply-html/issues"
+  },
+  "keywords": [
+    "html",
+    "markdown",
+    "ai",
+    "agent",
+    "llm",
+    "claude",
+    "sanitize",
+    "dompurify",
+    "reactive",
+    "no-javascript",
+    "agent-output",
+    "html-over-markdown"
+  ],
   "bin": {
     "simply-html": "./dist/cli/index.js"
   },
