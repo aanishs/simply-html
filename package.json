@@ -2,7 +2,7 @@
   "name": "simply-html",
   "version": "0.0.0",
   "private": true,
-  "description": "Turn an AI agent's markdown/HTML into a living, PIN-shareable page — readable, AI-editable, and even a tiny reactive app — where the model writes content, never JavaScript.",
+  "description": "Make your AI agent's markdown come alive — turn a plan, report, or doc into a dynamic, interactive HTML page (even a tiny app) you can read, edit by talking to it, and share.",
   "type": "module",
   "license": "MIT",
   "author": "aanishs (https://github.com/aanishs)",
