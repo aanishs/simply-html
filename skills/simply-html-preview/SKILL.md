@@ -48,8 +48,9 @@ to run the daemon in the foreground and watch its logs.
 - **Markdown** renders through the reading template (`html:false`, so raw HTML inside a
   `.md` is escaped). A **raw HTML** file is hosted as-is but always passes through the
   sanitizer first.
-- This is a **page tool, not an app builder.** Data is a small primitive (todos, lists,
-  counters). Do not try to make it build applications.
+- **Reading + simple components** (todo, list, counter, tabs, callout) are this skill's scope.
+  For a full **reactive app** (derived state, two-way inputs, components), use the
+  `simply-html-app` skill and the grammar in `AUTHORING.md`. Either way the model writes no JS.
 - **Never publish PHI.** Preview is local; `simply-html publish` runs a pre-publish scan.
 
 ## Declaring interactive components (HTML input)

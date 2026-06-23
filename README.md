@@ -65,7 +65,10 @@ A working habit tracker — derived counts, toggle, add, remove, a "you're all d
 - **The only way state changes is a closed action registry** (`toggle/set/inc/remove/add`) — the audited mutations, not arbitrary code.
 - **Interactive tags (`<input>`/`<button>`) are allowed but inert.** No `<form>`, every `on*` stripped, no form-action attributes — only the sandboxed runtime ever animates them.
 
-(This reactive substrate is the newest, most experimental piece — see [SECURITY.md](SECURITY.md) for the threat model.)
+The full grammar — directives, the formula language, actions, and reusable `data-sh-def`
+components — is the authoring contract in **[AUTHORING.md](AUTHORING.md)** (and the
+`simply-html-app` / `simply-html-design` skills). The reactive substrate is the newest, most
+experimental piece — see [SECURITY.md](SECURITY.md) for the threat model.
 
 ## How it works
 
