@@ -86,6 +86,18 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
     expect(out).toContain("data-sh-arg-h");
   });
 
+  it("keeps chart directives (data-sh-chart / values / labels / max)", () => {
+    const out = clean(
+      `<div data-sh-chart="bar" data-sh-values="[1,2,3]" data-sh-labels="names" data-sh-max="10"></div>`,
+    );
+    expect(out).toContain("data-sh-chart");
+    expect(out).toContain("data-sh-values");
+    expect(out).toContain("data-sh-labels");
+    expect(out).toContain("data-sh-max");
+    // the model can't smuggle a raw <svg> (still forbidden); the runtime draws it at runtime
+    expect(clean(`<svg onload="alert(1)"><rect/></svg>`)).not.toMatch(/<svg/i);
+  });
+
   it("drops a data-sh-class whose class is not in the class allowlist (no reactive CSS-exfil)", () => {
     const allowed = clean(`<span data-sh-class="success n > 0">x</span>`);
     expect(allowed).toContain("data-sh-class"); // allowlisted class survives

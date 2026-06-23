@@ -84,6 +84,70 @@ const toText = (v: unknown): string =>
 const truthy = (v: unknown): boolean =>
   v !== false && v != null && v !== 0 && v !== "" && !(Array.isArray(v) && v.length === 0);
 
+const SVGNS = "http://www.w3.org/2000/svg";
+const MAX_BARS = 366; // bound the number of marks drawn (a year of daily points)
+const toNums = (v: unknown): number[] =>
+  (Array.isArray(v) ? v : v == null ? [] : [v]).slice(0, MAX_BARS).map((x) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? n : 0;
+  });
+
+/**
+ * Draw a tiny reactive chart as SVG — bar / line / sparkline — from already-evaluated numeric data.
+ * The runtime owns 100% of this (createElementNS, never innerHTML; labels via textContent), so the
+ * model writes ZERO JS: it only declares `data-sh-chart` + formula-bound values. Colour is
+ * `currentColor` so the host theme styles it; geometry uses a viewBox so it scales fluidly.
+ */
+function renderChart(kind: string, values: number[], labels: string[], max: number, doc: Document): SVGElement {
+  const W = 100;
+  const H = kind === "sparkline" ? 14 : 32;
+  const svg = doc.createElementNS(SVGNS, "svg") as SVGElement;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("class", "sh-chart");
+  svg.setAttribute("style", "display:block;width:100%;height:auto;overflow:visible");
+  svg.setAttribute("role", "img");
+  const n = values.length;
+  const safeMax = max > 0 ? max : 1;
+
+  if (kind === "line" || kind === "sparkline") {
+    const points = values
+      .map((v, i) => `${(n <= 1 ? 0 : (i / (n - 1)) * W).toFixed(2)},${(H - (v / safeMax) * H).toFixed(2)}`)
+      .join(" ");
+    const poly = doc.createElementNS(SVGNS, "polyline");
+    poly.setAttribute("points", points);
+    poly.setAttribute("fill", "none");
+    poly.setAttribute("stroke", "currentColor");
+    poly.setAttribute("stroke-width", kind === "sparkline" ? "1.5" : "2");
+    poly.setAttribute("stroke-linejoin", "round");
+    poly.setAttribute("stroke-linecap", "round");
+    poly.setAttribute("vector-effect", "non-scaling-stroke"); // keep stroke crisp under viewBox scaling
+    svg.appendChild(poly);
+    return svg;
+  }
+
+  // default: bar
+  const slot = W / Math.max(1, n);
+  const bw = slot * 0.62;
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(0, Math.min(H, (values[i]! / safeMax) * H));
+    const rect = doc.createElementNS(SVGNS, "rect");
+    rect.setAttribute("x", (i * slot + (slot - bw) / 2).toFixed(2));
+    rect.setAttribute("y", (H - h).toFixed(2));
+    rect.setAttribute("width", bw.toFixed(2));
+    rect.setAttribute("height", h.toFixed(2));
+    rect.setAttribute("rx", "0.5");
+    rect.setAttribute("fill", "currentColor");
+    const label = labels[i];
+    if (label != null) {
+      const title = doc.createElementNS(SVGNS, "title");
+      title.textContent = `${label}: ${values[i]}`; // textContent — never innerHTML
+      rect.appendChild(title);
+    }
+    svg.appendChild(rect);
+  }
+  return svg;
+}
+
 const APP_MOUNTED = new WeakSet<Element>();
 
 /**
@@ -156,6 +220,9 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
     // here and let it re-wire children on each render.
     const repeatSrc = el.getAttribute("data-sh-repeat");
     if (repeatSrc !== null) { wireRepeat(el, repeatSrc, scope, sink, depth); return; }
+    // a chart owns its subtree too (the runtime fills it with a generated SVG).
+    const chartKind = el.getAttribute("data-sh-chart");
+    if (chartKind !== null) { wireChart(el, chartKind, scope, sink); return; }
     wireElement(el, scope, sink);
     for (const child of Array.from(el.children)) walk(child, scope, sink, depth);
   }
@@ -312,6 +379,25 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
     });
 
     sink.push(owner, () => { for (const d of childDisposers.splice(0)) d(); });
+  }
+
+  // `data-sh-chart="bar|line|sparkline"` + data-sh-values / data-sh-labels / data-sh-max (all formulas).
+  // Redraws the SVG reactively whenever the bound data changes. The model declares; the runtime draws.
+  function wireChart(el: Element, kind: string, scope: ScopeFn, sink: Sink): void {
+    const valuesF = compileFormula(el.getAttribute("data-sh-values") || "[]");
+    const labelsSrc = el.getAttribute("data-sh-labels");
+    const labelsF = labelsSrc ? compileFormula(labelsSrc) : null;
+    const maxSrc = el.getAttribute("data-sh-max");
+    const maxF = maxSrc ? compileFormula(maxSrc) : null;
+    sink.push(effect(() => {
+      const s = scope();
+      const values = toNums(valuesF(s));
+      const rawLabels = labelsF ? labelsF(s) : null;
+      const labels = Array.isArray(rawLabels) ? rawLabels.map((x) => String(x)) : [];
+      const max = maxF ? Number(maxF(s)) : values.reduce((m, v) => (v > m ? v : m), 0);
+      el.textContent = "";
+      el.appendChild(renderChart(kind, values, labels, max, doc));
+    }));
   }
 
   function wireAction(el: Element, spec: string, scope: ScopeFn, sink: Sink): void {

@@ -276,6 +276,49 @@ describe("substrate / components (data-sh-def + data-sh-use)", () => {
   });
 });
 
+describe("substrate / charts (data-sh-chart)", () => {
+  it("renders an SVG bar chart with one bar per value, scaled to the max", () => {
+    const el = root(`<div data-sh-chart="bar" data-sh-values="nums" data-sh-labels="names"></div>`);
+    mountApp(el, { nums: [1, 2, 4], names: ["a", "b", "c"] });
+    const svg = el.querySelector("svg")!;
+    expect(svg).not.toBeNull();
+    const bars = el.querySelectorAll("rect");
+    expect(bars.length).toBe(3);
+    const heights = Array.from(bars).map((r) => Number(r.getAttribute("height")));
+    expect(heights[0]).toBeLessThan(heights[2]); // 1 < 4
+    expect(heights[2]).toBeCloseTo(32, 0); // tallest bar fills the viewBox height
+    // labels become <title> tooltips (textContent, never markup)
+    expect(el.querySelector("rect title")!.textContent).toBe("a: 1");
+  });
+
+  it("redraws reactively when the bound data changes", () => {
+    const el = root(`
+      <div data-sh-chart="bar" data-sh-values="nums"></div>
+      <span id="flatten" data-sh-on="click: set($, 'nums', [5, 5, 5])"></span>`);
+    mountApp(el, { nums: [1, 2, 4] });
+    const before = Array.from(el.querySelectorAll("rect")).map((r) => Number(r.getAttribute("height")));
+    expect(before[0]).toBeLessThan(before[2]);
+    click(el.querySelector("#flatten"));
+    const after = Array.from(el.querySelectorAll("rect")).map((r) => Number(r.getAttribute("height")));
+    expect(after[0]).toBeCloseTo(after[2], 1); // now all equal
+  });
+
+  it("renders a line/sparkline as a single polyline", () => {
+    const el = root(`<div data-sh-chart="sparkline" data-sh-values="[3,1,4,1,5,9]"></div>`);
+    mountApp(el, {});
+    expect(el.querySelectorAll("polyline").length).toBe(1);
+    expect(el.querySelector("rect")).toBeNull();
+  });
+
+  it("a hostile label is inert text, never markup", () => {
+    const el = root(`<div data-sh-chart="bar" data-sh-values="[1]" data-sh-labels="evil"></div>`);
+    mountApp(el, { evil: ["<img src=x onerror=alert(1)>"] });
+    const title = el.querySelector("rect title")!;
+    expect(title.querySelector("img")).toBeNull(); // set via textContent, so no element materializes
+    expect(title.textContent).toContain("<img src=x onerror=alert(1)>");
+  });
+});
+
 describe("substrate / safety carries from markup into behavior", () => {
   it("rejects an unknown action at wire time", () => {
     const el = root(`<button data-sh-on="click: drop(habits)"></button>`);

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monthly budget · simply-html</title>
+  <!--
+    ============================================================================================
+    A budget that's ALIVE — edit an amount and the bar chart redraws instantly.
+
+    The chart is an SVG the audited runtime DRAWS from a formula (`data-sh-chart` +
+    `data-sh-values="categories.amount"`). The model writes a declaration, never a line of
+    JavaScript and never a chart library — just like the rest of the page.
+
+    Three layers, three authors: STRUCTURE (HTML, the model) · BEHAVIOR (the runtime <script>) ·
+    DESIGN (the <style>, the host). The "no JS / no CSS" rule is about the MODEL-AUTHORED region
+    (the <div data-sh-app> below); the <style>/<script> here are the host shell.
+    ============================================================================================
+  -->
+  <!-- ↓↓↓ HOST SHELL (design) — NOT model-authored ↓↓↓ -->
+  <style>
+    :root { color-scheme: light dark; --line: #e5e7eb; --muted: #6b7280; --accent: #16a34a; }
+    body { font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1.25rem; color: #111827; }
+    h1 { font-size: 1.5rem; margin: 0 0 .15rem; }
+    .meta { color: var(--muted); margin: 0 0 1.25rem; }
+    .total { font-size: 1.1rem; margin: 0 0 .75rem; }
+    .total b { font-size: 1.6rem; }
+    .chart { color: var(--accent); margin: .25rem 0 1.5rem; }   /* the SVG bars inherit currentColor */
+    ul.cats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+    ul.cats li { display: flex; align-items: center; gap: .6rem; }
+    ul.cats .name { flex: 1; }
+    ul.cats .amt { display: inline-flex; align-items: center; gap: .15rem; color: var(--muted); }
+    ul.cats input { width: 6rem; padding: .4rem .55rem; border: 1px solid var(--line); border-radius: .5rem; font: inherit; text-align: right; }
+    .over { color: #dc2626; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Monthly budget</h1>
+  <p class="meta">Edit any amount — the chart and totals update as you type.</p>
+
+  <!-- ╔══════════════════════════════════════════════════════════════════════════════════════╗ -->
+  <!-- ║ ↓↓↓ MODEL-AUTHORED REGION — HTML + read-only formulas + data-sh-* ONLY (no JS/CSS).   ║ -->
+  <!-- ╚══════════════════════════════════════════════════════════════════════════════════════╝ -->
+  <div data-sh-app data-sh-state='{
+        "budget": 4000,
+        "categories": [
+          {"name":"Rent","amount":1800},
+          {"name":"Groceries","amount":600},
+          {"name":"Transport","amount":250},
+          {"name":"Fun","amount":400},
+          {"name":"Savings","amount":700}
+        ]
+      }'>
+
+    <p class="total">
+      <span data-sh-text="'Spent $' + sum(categories.amount) + ' of $' + budget"></span> ·
+      <span data-sh-class="over sum(categories.amount) > budget"
+            data-sh-text="'$' + (budget - sum(categories.amount)) + ' left'"></span>
+    </p>
+
+    <!-- the runtime draws this <svg> from the formula; the model writes no JS and no chart lib -->
+    <div class="chart" data-sh-chart="bar"
+         data-sh-values="categories.amount"
+         data-sh-labels="categories.name"
+         data-sh-max="max(categories.amount)"></div>
+
+    <ul class="cats" data-sh-repeat="categories" data-sh-as="c">
+      <li>
+        <span class="name" data-sh-text="c.name"></span>
+        <span class="amt">$ <input type="number" data-sh-bind="c.amount"></span>
+      </li>
+    </ul>
+  </div>
+  <!-- ↑↑↑ END MODEL-AUTHORED REGION ↑↑↑ -->
+
+  <!-- HOST SHELL (behavior): the one audited runtime. Not model-authored. -->
+  <script src="../dist/runtime/runtime.js"></script>
+</body>
+</html>

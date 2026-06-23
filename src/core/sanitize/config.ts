@@ -58,6 +58,7 @@ export const SIMPLY_HTML_DATA_ATTRS = [
   "data-sh-text", "data-sh-show", "data-sh-class",
   "data-sh-repeat", "data-sh-as", "data-sh-on", "data-sh-bind",
   "data-sh-def", "data-sh-use", // reusable components (def template + use site)
+  "data-sh-chart", "data-sh-values", "data-sh-labels", "data-sh-max", // reactive SVG charts
 ];
 
 /**

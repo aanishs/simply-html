@@ -27,6 +27,7 @@ directives, authored by your agent:
   this is the thesis, made real.)
 - **A doc you edit by talking** — select a paragraph, say *"turn this into a 3-item checklist,"* and
   your local `claude`/`codex` CLI rewrites just that bit, in place.
+- **Charts, with no chart library and no model JS** — `<div data-sh-chart="bar" data-sh-values="categories.amount">` and the runtime draws a reactive SVG that redraws as the data changes. A budget whose bars move as you edit it ([`examples/budget.html`](examples/budget.html)).
 - **An actual little app** — a habit tracker, a tally, a planner, a budget splitter:
 
 ```html
@@ -74,6 +75,7 @@ let it get?*
 git clone https://github.com/aanishs/simply-html && cd simply-html
 npm install && npm run build
 node dist/cli/index.js preview examples/plan.html            # a project plan that's actually alive
+node dist/cli/index.js preview examples/budget.html          # a budget with a live, no-JS bar chart
 node dist/cli/index.js preview examples/habit-tracker.html   # a little reactive app
 node dist/cli/index.js preview examples/test-page.html       # a reading page — select text to edit
 ```

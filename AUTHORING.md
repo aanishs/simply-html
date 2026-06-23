@@ -39,6 +39,10 @@ live root is also reachable in any formula/action as `$`.
 | `data-sh-def` | name | defines a reusable component (its inner HTML is the template) |
 | `data-sh-use` | name | expands a named component here |
 | `data-sh-arg-<param>` | formula | passes `<param>` into a `data-sh-use` |
+| `data-sh-chart` | `bar` / `line` / `sparkline` | draws a reactive SVG chart (the runtime draws it; no chart library, no model JS) |
+| `data-sh-values` | formula → number array | the chart's data series |
+| `data-sh-labels` | formula → array | optional per-point labels (shown as hover tooltips) |
+| `data-sh-max` | formula → number | optional fixed y-scale max (default: the largest value) |
 
 ### Examples
 
@@ -123,6 +127,23 @@ Define a fragment once, reuse it with arguments:
 A `data-sh-def` is harvested at mount and not rendered directly. `data-sh-arg-<param>` passes a
 formula in as `<param>`; args are re-evaluated reactively. Define components at the top level of
 the app region. Component nesting is depth-capped, so a component cannot reference itself forever.
+
+## 5b. Charts (no chart library, no model JS)
+
+Bind a numeric series and the runtime draws a small reactive SVG — it redraws when the data changes:
+
+```html
+<div data-sh-chart="bar"
+     data-sh-values="categories.amount"
+     data-sh-labels="categories.name"></div>
+
+<div data-sh-chart="sparkline" data-sh-values="[3, 1, 4, 1, 5, 9]"></div>
+```
+
+`bar`, `line`, and `sparkline` are the kinds. `data-sh-values` is a formula resolving to numbers
+(e.g. a vectorized field `categories.amount`, or a literal `[1, 2, 3]`); `data-sh-labels` (optional)
+become hover tooltips; `data-sh-max` (optional) fixes the scale. The bars/line use `currentColor`, so
+the host's CSS `color` themes the chart. You declare it; the runtime draws the SVG — you write no JS.
 
 ## 6. Rules & limits (what keeps it safe)
 
