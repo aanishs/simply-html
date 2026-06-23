@@ -82,6 +82,25 @@ describe("reactive / signals", () => {
     expect(sum).toBe(3);
   });
 
+  it("an effect disposed earlier in the same flush wave does not re-run (the repeat teardown case)", () => {
+    // models `repeat`: an owner effect rebuilds children on every change; the OLD child
+    // effects, subscribed to the same signal, must not fire on the about-to-be-replaced DOM.
+    const [get, set] = signal(0);
+    let childRuns = 0;
+    let disposeChild = () => {};
+    // owner runs first (subscribes first), disposes the previous child, makes a new one
+    effect(() => {
+      get(); // owner depends on the signal
+      disposeChild();
+      disposeChild = effect(() => { childRuns++; get(); });
+    });
+    expect(childRuns).toBe(1); // one child built
+    set(1); // owner + old child both scheduled; owner runs first, disposes old child
+    expect(childRuns).toBe(2); // exactly the rebuilt child ran — the disposed one did NOT
+    set(2);
+    expect(childRuns).toBe(3); // still one child run per change, no leak accumulation
+  });
+
   it("dispose stops an effect", () => {
     const [get, set] = signal(0);
     let runs = 0;

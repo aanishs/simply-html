@@ -18,6 +18,7 @@ type Subscriber = Set<Computation>;
 interface Computation {
   run: () => void;
   deps: Set<Subscriber>; // the subscriber-sets this computation is currently in
+  disposed: boolean;
 }
 
 let currentObserver: Computation | null = null;
@@ -38,6 +39,7 @@ function cleanup(c: Computation): void {
 }
 
 function schedule(c: Computation): void {
+  if (c.disposed) return; // a disposed effect never runs again, even if a write targets it
   pending.add(c);
   if (batchDepth === 0 && !flushing) flush();
 }
@@ -52,7 +54,9 @@ function flush(): void {
       if (++guard > 1_000_000) throw new Error("reactive update did not settle (cycle?)");
       const wave = [...pending];
       pending.clear();
-      for (const c of wave) c.run();
+      // a computation disposed earlier in this same wave (e.g. a `repeat` tearing down the
+      // child bindings it's about to rebuild) must not re-run and re-subscribe on dead DOM.
+      for (const c of wave) if (!c.disposed) c.run();
     }
   } finally {
     flushing = false;
@@ -87,6 +91,7 @@ export function signal<T>(initial: T): Signal<T> {
 export function effect(fn: () => void): () => void {
   const c: Computation = {
     deps: new Set(),
+    disposed: false,
     run: () => {
       cleanup(c);
       const prev = currentObserver;
@@ -95,7 +100,11 @@ export function effect(fn: () => void): () => void {
     },
   };
   c.run();
-  return () => cleanup(c);
+  return () => {
+    c.disposed = true;
+    cleanup(c);
+    pending.delete(c); // if it was scheduled this wave, drop it
+  };
 }
 
 /** A memoized derived value. Recomputes when its inputs change; reads subscribe like a signal. */
