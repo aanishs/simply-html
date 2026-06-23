@@ -225,6 +225,40 @@ describe("substrate / mountApps scans [data-sh-app] regions", () => {
   });
 });
 
+describe("substrate / components (data-sh-def + data-sh-use)", () => {
+  it("expands a component at the use site with args, and removes the definition", () => {
+    const el = root(`
+      <div data-sh-def="greeting"><p data-sh-text="'Hi ' + who"></p></div>
+      <div data-sh-use="greeting" data-sh-arg-who="name"></div>`);
+    mountApp(el, { name: "Sam" });
+    expect(el.querySelector("[data-sh-def]")).toBeNull(); // definition is harvested, not rendered
+    expect(el.querySelector("p")!.textContent).toBe("Hi Sam");
+  });
+
+  it("a component used inside a repeat renders per item and stays reactive", () => {
+    const el = root(`
+      <div data-sh-def="row"><button data-sh-on="click: toggle(h, 'done')" data-sh-text="h.name"></button></div>
+      <ul data-sh-repeat="habits" data-sh-as="h"><li data-sh-use="row" data-sh-arg-h="h"></li></ul>
+      <p data-sh-text="count(habits where done)"></p>`);
+    mountApp(el, { habits: [{ name: "a", done: false }, { name: "b", done: true }] });
+    expect(el.querySelectorAll("li button").length).toBe(2);
+    expect(el.querySelector("p")!.textContent).toBe("1");
+    click(el.querySelectorAll("li button")[0]); // toggle "a" done via the component's action
+    expect(el.querySelector("p")!.textContent).toBe("2");
+  });
+
+  it("an unknown component is skipped, not fatal", () => {
+    const el = root(`<div data-sh-use="nope"></div><p data-sh-text="'ok'"></p>`);
+    expect(() => mountApp(el, {})).not.toThrow();
+    expect(el.querySelector("p")!.textContent).toBe("ok");
+  });
+
+  it("a self-referential component is depth-capped, not an expansion bomb", () => {
+    const el = root(`<div data-sh-def="loop"><span data-sh-use="loop"></span></div><div data-sh-use="loop"></div>`);
+    expect(() => mountApp(el, {})).not.toThrow(); // bounded by MAX_COMPONENT_DEPTH
+  });
+});
+
 describe("substrate / safety carries from markup into behavior", () => {
   it("rejects an unknown action at wire time", () => {
     const el = root(`<button data-sh-on="click: drop(habits)"></button>`);

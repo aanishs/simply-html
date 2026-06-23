@@ -57,6 +57,7 @@ export const SIMPLY_HTML_DATA_ATTRS = [
   "data-sh-app", "data-sh-state", "data-sh-ready",
   "data-sh-text", "data-sh-show", "data-sh-class",
   "data-sh-repeat", "data-sh-as", "data-sh-on", "data-sh-bind",
+  "data-sh-def", "data-sh-use", // reusable components (def template + use site)
 ];
 
 /**
@@ -155,6 +156,8 @@ export function applyShHooks(purify: PurifyLike): void {
       else d.keepAttr = false;
       return;
     }
+    // `data-sh-arg-<param>` passes a read-only formula into a component — inert data, force-keep.
+    if (d.attrName.startsWith("data-sh-arg-")) { d.forceKeepAttr = true; return; }
     // The closed data-sh-* hook set carries formulas / action calls / JSON whose values legitimately
     // contain ':' '(' etc. DOMPurify validates every attribute value against the URI allowlist and
     // would drop e.g. data-sh-on="click: toggle(..)" as a bogus URI. These are inert data the

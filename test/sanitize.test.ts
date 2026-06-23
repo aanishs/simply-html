@@ -76,6 +76,16 @@ describe("sanitizer: substrate directives survive; dangerous bindings do not", (
     expect(out).toContain("data-sh-on");
   });
 
+  it("keeps component directives (data-sh-def / data-sh-use / data-sh-arg-*)", () => {
+    const out = clean(
+      `<div data-sh-def="row"><span data-sh-text="h.name"></span></div>` +
+      `<div data-sh-use="row" data-sh-arg-h="item"></div>`,
+    );
+    expect(out).toContain("data-sh-def");
+    expect(out).toContain("data-sh-use");
+    expect(out).toContain("data-sh-arg-h");
+  });
+
   it("drops a data-sh-class whose class is not in the class allowlist (no reactive CSS-exfil)", () => {
     const allowed = clean(`<span data-sh-class="success n > 0">x</span>`);
     expect(allowed).toContain("data-sh-class"); // allowlisted class survives

@@ -47,6 +47,9 @@ const safeUrl = (v: string): boolean => {
 // not assignable as a write target: prototype-chain/built-in members, plus `$` (the state root alias).
 const isUnsafeWriteKey = (k: string): boolean => isForbiddenKey(k) || k === "$";
 
+const MAX_COMPONENT_DEPTH = 32; // bounds component-use nesting so a self-referential component can't bomb
+const warn = (msg: string): void => { if (typeof console !== "undefined") console.warn(`[simply-html] ${msg}`); };
+
 /** Split on a top-level separator, ignoring it inside quotes or (), [], {}. */
 function splitTopLevel(src: string, sep: string): string[] {
   const out: string[] = [];
@@ -125,7 +128,18 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
   const rootScope: ScopeFn = () => { const s = getState(); return { ...s, $: s }; };
   const disposers: Sink = [];
 
-  walk(root, rootScope, disposers);
+  // Components: the model defines a reusable fragment once with `data-sh-def="name"` and stamps it
+  // with `data-sh-use="name"` (passing args via `data-sh-arg-<param>="<formula>"`). Definitions are
+  // harvested here and removed from the DOM (they are templates, not content), then expanded at use
+  // sites — at MOUNT time, composing the same audited primitives. No new model code, no eval.
+  const components = new Map<string, string>();
+  root.querySelectorAll("[data-sh-def]").forEach((el) => {
+    const name = el.getAttribute("data-sh-def") || "";
+    if (name) components.set(name, el.innerHTML);
+    el.remove();
+  });
+
+  walk(root, rootScope, disposers, 0);
 
   return {
     state: () => getState(),
@@ -134,13 +148,43 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
 
   // ---- wiring ---------------------------------------------------------------
 
-  function walk(el: Element, scope: ScopeFn, sink: Sink): void {
+  function walk(el: Element, scope: ScopeFn, sink: Sink, depth: number): void {
+    // a `data-sh-use` expands a component in place (owns its subtree like `repeat`).
+    const useName = el.getAttribute("data-sh-use");
+    if (useName !== null) { wireUse(el, useName, scope, sink, depth); return; }
     // `repeat` owns its whole subtree (it clones a template per item), so we stop descending
     // here and let it re-wire children on each render.
     const repeatSrc = el.getAttribute("data-sh-repeat");
-    if (repeatSrc !== null) { wireRepeat(el, repeatSrc, scope, sink); return; }
+    if (repeatSrc !== null) { wireRepeat(el, repeatSrc, scope, sink, depth); return; }
     wireElement(el, scope, sink);
-    for (const child of Array.from(el.children)) walk(child, scope, sink);
+    for (const child of Array.from(el.children)) walk(child, scope, sink, depth);
+  }
+
+  // Expand `data-sh-use="name"`: clone the named component's template into `el`, wiring it against
+  // a scope extended with the args (`data-sh-arg-<param>="<formula>"`, re-evaluated reactively).
+  function wireUse(el: Element, name: string, scope: ScopeFn, sink: Sink, depth: number): void {
+    if (depth >= MAX_COMPONENT_DEPTH) { warn(`component '${name}' nested too deep`); return; }
+    const template = components.get(name);
+    if (template === undefined) { warn(`unknown component '${name}'`); return; }
+
+    // each arg is a formula re-evaluated against the current scope, so the component stays reactive
+    const argFns: Array<[string, (s?: Scope) => unknown]> = [];
+    for (const attr of Array.from(el.attributes)) {
+      if (!attr.name.startsWith("data-sh-arg-")) continue;
+      argFns.push([attr.name.slice("data-sh-arg-".length), compileFormula(attr.value)]);
+    }
+    const childScope: ScopeFn = () => {
+      const s: Scope = { ...scope() };
+      for (const [param, f] of argFns) s[param] = f(scope());
+      return s;
+    };
+
+    const tpl = doc.createElement("template");
+    tpl.innerHTML = template;
+    const frag = tpl.content.cloneNode(true) as DocumentFragment;
+    el.textContent = "";
+    for (const child of Array.from(frag.children)) walk(child, childScope, sink, depth + 1);
+    el.appendChild(frag);
   }
 
   function wireElement(el: Element, scope: ScopeFn, sink: Sink): void {
@@ -242,7 +286,7 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
     sink.push(() => el.removeEventListener(evt, onInput));
   }
 
-  function wireRepeat(el: Element, src: string, parentScope: ScopeFn, sink: Sink): void {
+  function wireRepeat(el: Element, src: string, parentScope: ScopeFn, sink: Sink, depth: number): void {
     const alias = el.getAttribute("data-sh-as") || "item";
     const template = el.innerHTML;
     el.textContent = "";
@@ -262,7 +306,7 @@ export function mountApp(root: Element, initial: Record<string, unknown>): AppHa
         tpl.innerHTML = template;
         const frag = tpl.content.cloneNode(true) as DocumentFragment;
         const itemScope: ScopeFn = () => ({ ...parentScope(), [alias]: item });
-        for (const child of Array.from(frag.children)) walk(child, itemScope, childDisposers);
+        for (const child of Array.from(frag.children)) walk(child, itemScope, childDisposers, depth);
         el.appendChild(frag);
       }
     });

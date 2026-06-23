@@ -55,14 +55,17 @@
       🔥 All done. Nice work.
     </p>
 
+    <!-- define the row once as a reusable component, then stamp it per item -->
+    <div data-sh-def="habit-row">
+      <button class="habit"
+              data-sh-class="done h.done"
+              data-sh-on="click: toggle(h, 'done')"
+              data-sh-text="if(h.done, '✓  ', '○  ') + h.name"></button>
+      <button class="remove" title="remove" data-sh-on="click: remove(habits, h)">×</button>
+    </div>
+
     <ul class="habits" data-sh-repeat="habits" data-sh-as="h">
-      <li>
-        <button class="habit"
-                data-sh-class="done h.done"
-                data-sh-on="click: toggle(h, 'done')"
-                data-sh-text="if(h.done, '✓  ', '○  ') + h.name"></button>
-        <button class="remove" title="remove" data-sh-on="click: remove(habits, h)">×</button>
-      </li>
+      <li data-sh-use="habit-row" data-sh-arg-h="h"></li>
     </ul>
 
     <div class="add-row">
